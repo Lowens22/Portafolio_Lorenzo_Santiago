@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Write-ups de CTF</title>
+    <link href="./style/estilo.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <!-- Navbar -->
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex-shrink-0">
+                    <h1>Santiago Lorenzo</h1>
+                </div>
+                <div class="hidden md:flex space-x-4">
+                    <a href="index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+                    <a href="index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+                    <a href="index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+                    <a href="writeups.html" class="hover:text-blue-400 transition">Write-ups</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Encabezado -->
+    <header class="text-center py-12">
+        <h1 class="text-5xl font-bold">Write-ups de CTF</h1>
+        <p class="mt-4 text-lg text-gray-300">Aquí comparto las soluciones y análisis de los retos CTF que he resuelto</p>
+    </header>
+
+    <!-- Lista de Write-ups -->
+    <section class="container mx-auto px-8 pb-16 space-y-6">
+
+        <!-- Ejemplo de Write-up -->
+        <div class="bg-gray-800 p-6 rounded-lg project-card">
+            <h2 class="text-3xl font-semibold">PicoCTF 2025 - Buffer Overflow</h2>
+            <p class="mt-2 text-gray-300">
+                Exploité un buffer overflow básico para ganar acceso a la shell. Se utilizó GDB y Python para crear el payload.
+            </p>
+            <div class="mt-3 flex justify-between items-center">
+                <span class="text-sm text-gray-400">📅 28 Julio 2025</span>
+                <a href="write-ups/picoctf-buffer-overflow.html" class="text-blue-400 hover:underline">Leer más →</a>
+            </div>
+        </div>
+
+        <!-- Otro ejemplo -->
+        <div class="bg-gray-800 p-6 rounded-lg project-card">
+            <h2 class="text-3xl font-semibold">HackTheBox - RootMe</h2>
+            <p class="mt-2 text-gray-300">
+                Enumeración, explotación de subida de archivos y escalada de privilegios en una máquina Linux sencilla.
+            </p>
+            <div class="mt-3 flex justify-between items-center">
+                <span class="text-sm text-gray-400">📅 15 Julio 2025</span>
+                <a href="write-ups/rootme.html" class="text-blue-400 hover:underline">Leer más →</a>
+            </div>
+        </div>
+
+        <!-- Agrega más write-ups aquí copiando el bloque -->
+        
+    </section>
+
+</body>
+</html>
