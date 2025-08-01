@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paradis</title>
+  <link href="../style/estilo.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeups.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Maquina: Paradise</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 01/08/2025 | Categoría: LINUX </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Este reto consiste en comprometer una máquina Linux en un entorno controlado. No se proporciona una flag directa,
+            pero el objetivo es obtener acceso privilegiado (root) y entender el vector de escalada a través de un script de backup vulnerable.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            El análisis comenzó con un reconocimiento básico utilizando herramientas de enumeración para comprender los servicios expuestos.
+            Una vez dentro del sistema como usuario limitado, buscamos posibles vectores de escalada de privilegios.
+        </p>
+        <pre><code class="language-bash">
+            sudo nmap -p- -open -O -sS -sC -min-rate 5000 -n -Pn 172.17.0.2
+            
+            PORT    STATE SERVICE
+            22/tcp  open  ssh
+            | ssh-hostkey: 
+            |   1024 a1:bc:79:1a:34:68:43:d5:f4:d8:65:76:4e:b4:6d:b1 (DSA)
+            |   2048 38:68:b6:3b:a3:b2:c9:39:a3:d5:f9:97:a9:5f:b3:ab (RSA)
+            |   256 d2:e2:87:58:d0:20:9b:d3:fe:f8:79:e3:23:4b:df:ee (ECDSA)
+            |_  256 b7:38:8d:32:93:ec:4f:11:17:9d:86:3c:df:53:67:9a (ED25519)
+            80/tcp  open  http
+            |_http-title: Andys's House
+            139/tcp open  netbios-ssn
+            445/tcp open  microsoft-ds
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            en el http encontramos un ZXN0b2VzdW5zZWNyZXRvCg== que descodificado es estoesunsecreto.
+            era un directorio mas que tenia un mensaje para lucas que decia que su contraseña era facil
+            por lo tanto podemos aplicar fuerza bruta y eso hice.
+        </p>
+
+    <section class="mb-8">
+        <p class="text-gray-300 mb-4">
+            Nos conectamos vía SSH como el usuario <code>lucas</code> a la IP de la máquina vulnerable:
+        </p>
+
+        <pre><code class="language-bash">
+            ssh lucas@172.17.0.2
+            # Password: chocolate
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Ya con acceso, buscamos archivos con el bit SUID activado, que puedan permitirnos escalar privilegios.
+        </p>
+
+        <pre><code class="language-bash">
+            find / -perm -4000 -type f 2>/dev/null
+        </code></pre>
+        </section>
+
+    <!-- Explotación / Resolución -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Explotación / Resolución</h2>
+        <p class="text-gray-300 mb-4">
+            El comando anterior reveló la existencia del binario <code>/usr/local/bin/privileged_exec</code>, 
+            el cual tenía el bit SUID activado. Lo ejecutamos directamente:
+        </p>
+
+        <pre><code class="language-bash">
+            /usr/local/bin/privileged_exec
+            # Resultado: spawnea una shell como root
+            whoami
+            root
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Gracias a este binario vulnerable, obtuvimos acceso directo como usuario <code>root</code>.
+        </p>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Conseguimos acceso como <code>root</code>, pero no encontramos una flag en la máquina. 
+            Aun así, el objetivo principal de escalada de privilegios fue completado con éxito.
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
